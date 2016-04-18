@@ -15,6 +15,11 @@ import time
 
 class geometricPt:
     def __init__(self,params={'m':[0.5,1.,1.],'T':[1e-1,1.],'L':1.,'D':0.5,'d':0.1,'a':[1,1],'b':[0.5,0.5],'kb':1.,'force':[0.,1.7e-1,0.],'accelFlag':'constant'}):
+        # L is full length of space molecule lives in
+        # 'D' is width of frame
+        # 'd' is width of core
+        # 'a' is probability that molecule's collision with cold and hot wall picks up velocity instead of total reflection
+        # 'b' is probability that collision between molecule and frame results in elastic collision instead of just passing through
         self.kb=1 #boltzmann constant
         self.params=params
         D=params['D']
@@ -104,6 +109,8 @@ class geometricPt:
     def timeNoForce(self,x,v,xW,n):
         times=np.diag(n.dot((xW-x).T))/n.dot(v)
         tPos=np.where(times>0)[0]
+#        if len(tPos)==0:
+#            pdb.set_trace()
         minIdx=tPos[np.argmin(times[tPos])]
         return times[minIdx],x+v*times[minIdx],v,minIdx
     
@@ -155,7 +162,7 @@ class geometricPt:
             v=v-2*self.n[wIdx].dot(v)*self.n[wIdx]
             
         elif wIdx<=9 or wIdx==12 or wIdx==13:
-            #FUrE, FLrE, collision between 
+            #FUrE, FLrE, collision between molecule and frame
             r=np.random.rand()
             if r<self.params['b'][wIdx%2]:
                 v=v-2*self.n[wIdx].dot(v)*self.n[wIdx]

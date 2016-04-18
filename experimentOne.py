@@ -7,6 +7,7 @@ Created on Fri Dec 18 08:50:44 2015
 from thermoSim import *
 import matplotlib.pyplot as plt
 import cPickle as pickle
+import numpy as np
 
 
 def script1():
@@ -17,12 +18,40 @@ def script1():
     plot_molecule_V(fN)
     
 def script_core():
-    b=[0.5,0.5]
-    m_core=10.
-    fN='exp_core_'+str(b[0])+'_'+str(b[1])+'_m_'+str(m_core)
-#    exp_coreOne(fN,N=1e6,b=b,m_core=m_core)
-    plot_molecule_V(fN)
-    plot_core_V(fN)
+    b_list=[[.1,.1],[0.5,0.5],[.9,.9]]
+    m_core_list=[1.,10.,100.]
+#    b_list=[[0.7,0.7]]
+#    m_core_list=[100.]
+    N=1e6
+    fN_list=[]
+    for b in b_list:
+        for m_core in m_core_list:
+            fN='exp_core_'+str(b[0])+'_'+str(b[1])+'_m_'+str(m_core)+'_N_'+str(N)
+            fN_list.append(fN)
+#            exp_coreOne(fN,N=N,b=b,m_core=m_core)
+#            plot_molecule_V(fN)
+#            plot_core_V(fN)
+    
+#    for i in xrange(len(m_core_list)):
+#        m_core=m_core_list[i]
+#        fN_compare='exp_core_drift_V_compare_b_fix_m_core_'+str(m_core)
+#        plot_core_V_drift_comparison(fN_compare,[fN_list[i],fN_list[i+len(b_list)],fN_list[i+2*len(b_list)]])
+#
+#    for i in xrange(len(b_list)):
+#        b=b_list[i]
+#        fN_compare='exp_core_drift_V_compare_m_core_fix_b_'+str(b[0])+'_'+str(b[1])
+#        plot_core_V_drift_comparison(fN_compare,fN_list[i*len(m_core_list):(i+1)*len(m_core_list)])
+        
+    for i in xrange(len(m_core_list)):
+        m_core=m_core_list[i]
+        fN_compare='exp_core_tau_ditr_compare_b_fix_m_core_'+str(m_core)
+        plot_tau_distr_comparison(fN_compare,[fN_list[i],fN_list[i+len(b_list)],fN_list[i+2*len(b_list)]])
+
+    for i in xrange(len(b_list)):
+        b=b_list[i]
+        fN_compare='exp_core_tau_distr_compare_m_core_fix_b_'+str(b[0])+'_'+str(b[1])
+        plot_tau_distr_comparison(fN_compare,fN_list[i*len(m_core_list):(i+1)*len(m_core_list)])
+    
 
 def exp_pingpongOne(fN,N=1e6,a=[1,1]):
     params={'m':[1.,0.,0.],'T':[1e-1,1.],'L':1.,'D':0.,'d':0.,'a':a,'b':[0.,0.],
@@ -33,7 +62,7 @@ def exp_pingpongOne(fN,N=1e6,a=[1,1]):
     pickle.dump(ptDict,open(fN+'.p','wr'))
 
 def exp_coreOne(fN,N=1e6,b=[1.,1.],m_core=1.):
-    params={'m':[1.,m_core,0.],'T':[1e-1,1.],'L':1.,'D':0.,'d':0.,'a':[0.5,0.5],'b':b,
+    params={'m':[1.,m_core,0.],'T':[1e-1,1.],'L':1.,'D':1e-7,'d':0.,'a':[0.5,0.5],'b':b,
             'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}
     pt=geometricPt(params=params)
     [pt.step() for n in xrange(int(N))]
@@ -125,7 +154,144 @@ def plot_molecule_V(fN):
     plt.legend()
     plt.savefig(fN+'_'+suffix+'.pdf')
     plt.show()
+
+def plot_core_V_drift(fN):
+    # 1. time-averaged velocity of the core as time increases
     
+    
+    ptd=pickle.load(open(fN+'.p','r'))
+    t=ptd['t']
+    vt=np.array(ptd['vt'].T[1])
+
+    init_cutoff=100   
+    t=t[init_cutoff:]
+    vt=vt[init_cutoff:]
+    
+    suffix='core_driftV'
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    v_bar=np.cumsum(vt)/t
+    t_diff=np.diff(t)
+    v_std=[np.sum(t_diff[:i+1]*(vt[:i+1]-v_bar[i])**2/t[i])**(0.5) for i in xrange(len(v_bar)-1)]
+    ax.plot(t,v_bar,'-k',lw=2,label='dift core V')
+    ax.fill_between(t[:-1],v_bar[:-1]-v_std,v_bar[:-1]+v_std,alpha=0.3)
+    ax.set_ylabel('velocity')
+    ax.set_xlabel('time')
+    ax.set_title(suffix)
+    plt.legend()
+    plt.savefig(fN+'_'+suffix+'.pdf')   
+
+
+def plot_core_V_drift_comparison(fN_compare,fN_list):
+    # 1. time-averaged velocity of the core as time increases
+    # compare multiple fN
+    
+    suffix='core_driftV_comparison'
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    
+    for fN in fN_list:
+        ptd=pickle.load(open(fN+'.p','r'))
+        t=ptd['t']
+        vt=np.array(ptd['vt'].T[1])/ptd['mu'][1]
+    
+        init_cutoff=10000   
+        t=t[init_cutoff:]
+        vt=vt[init_cutoff:]
+        v_bar=np.cumsum(vt)/t
+        t_diff=np.diff(t)
+#        v_std=[np.sum(t_diff[:i+1]*(vt[:i+1]-v_bar[i])**2/t[i])**(0.5) for i in xrange(len(v_bar)-1)]
+        ax.plot(t,v_bar,lw=2,label=fN)
+#        ax.fill_between(t[:-1],v_bar[:-1]-v_std,v_bar[:-1]+v_std,alpha=0.3)
+    ax.set_ylabel('velocity')
+    ax.set_xlabel('time')
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    plt.savefig(fN_compare+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+
+def plot_core_V_sliding(fN):
+    # 2. sliding-window average of velocity the core
+    # not very useful it seems
+    ptd=pickle.load(open(fN+'.p','r'))
+    t=ptd['t']
+    vt=ptd['vt'].T[1]/ptd['mu'][1]
+
+    init_cutoff=100   
+    t=t[init_cutoff:]
+    vt=vt[init_cutoff:]
+    
+    
+    suffix='core_driftV_sliding_window'
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    window_width=1000
+    v_bar=np.array([np.sum(vt[i:i+window_width])/(t[i+window_width]-t[i]) for i in xrange(len(vt)-window_width)])
+    t_diff=np.diff(t)
+    v_std=np.array([np.sum(t_diff[i:i+window_width]*(vt[i:i+window_width]-v_bar[i])**2/(t[i+window_width]-t[i]))**(0.5) for i in xrange(len(v_bar)-1)])
+#    pdb.set_trace()
+    ax.plot(t[window_width:],v_bar,'-k',lw=2,label='dift core V sliding')
+    ax.fill_between(t[window_width:-1],v_bar[:-1]-v_std,v_bar[:-1]+v_std,alpha=0.3)
+    ax.set_ylabel('velocity sliding')
+    ax.set_xlabel('time')
+    ax.set_title(suffix)
+    plt.legend()
+    plt.savefig(fN+'_'+suffix+'.pdf') 
+
+def plot_tau_distr(fN):
+    # tau is time between two consecutive collisions between molecule and frame
+    # we plot distribution of tau for all times
+    ptd=pickle.load(open(fN+'.p','r'))
+    init_cutoff=10000 
+    t=ptd['t'][init_cutoff:]
+    wt=ptd['wt'][init_cutoff:]
+    # w=8,9,12,13 corresponds to collision between molecule and frame
+    mask=np.where(np.logical_or(np.logical_or(np.logical_or(wt==8,wt==9),wt==12),wt==13))[0]
+    t_hit=t[mask]
+    tau=np.diff(t_hit)
+    
+    suffix='tau'    
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    nBin=100
+    
+    freq, bin_edges=np.histogram(tau,bins=nBin,normed=False,range=[0,20])
+    cenc=(bin_edges[:-1]+bin_edges[1:])/2
+    ax.plot(cenc,freq,'-b',lw=2,label='tau')
+    ax.set_ylabel('probability density')
+    ax.set_xlabel('time between collision')
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    plt.savefig(fN+'_'+suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+def plot_tau_distr_comparison(fN_compare,fN_list):
+    suffix='tau_distr_comparison_closer'
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    
+    nBin=100
+    rg=[0,5]
+    for fN in fN_list:
+        init_cutoff=10000 
+        ptd=pickle.load(open(fN+'.p','r'))
+        t=ptd['t'][init_cutoff:]
+        wt=ptd['wt'][init_cutoff:]
+        mask=np.where(np.logical_or(np.logical_or(np.logical_or(wt==8,wt==9),wt==12),wt==13))[0]
+        t_hit=t[mask]
+        tau=np.diff(t_hit)
+        freq, bin_edges=np.histogram(tau,bins=nBin,normed=False,range=rg)
+        cenc=(bin_edges[:-1]+bin_edges[1:])/2
+        ax.plot(cenc,freq,lw=2,label=fN)
+    ax.set_ylabel('prob density')
+    ax.set_xlabel('tau')
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    plt.savefig(fN_compare+'_'+suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+
 def plot_core_V(fN):
     # distribution of velocities of the core
     ptd=pickle.load(open(fN+'.p','r'))
@@ -206,22 +372,10 @@ def plot_molecule_pos(fN):
     ax.set_ylabel('probability density')
     ax.set_xlabel('position')
     ax.set_title(suffix+', alpha='+str(a))
-#    ax.set_xlim([0,3.5])
-#    x=np.linspace(0,max(np.abs(vt)),1000)    
-#    Gaussianfun=lambda T: Gaussianp(x,params['m'][0],T)
-#    pdf1=MBfun(Tc)
-#    pdf2=MBfun(Th)
-#    pdf3=(a[0]*MBfun(Tc)+a[1]*(1-a[0])*MBfun(Th))/(a[0]+a[1]-a[1]*a[0])
-#    ax.plot(x,pdf1,'-b',lw=0.5, label='cold wall Gaussian')
-#    ax.plot(x,pdf2,'-r',lw=0.5, label='hot wall Gaussian')
-#    ax.plot(x,pdf3,'-k',lw=0.5,label='theoretical prediction')
     plt.legend()
     plt.savefig(fN+'_'+suffix+'.pdf')
     plt.show()
 
-
-#def Gaussianp(x,m,T,kb=1):
-#    return m/(kb*T)*x*np.exp(-m*x**)
 
 def MBp(x,m,T,kb=1):
     return m/(kb*T)*x*np.exp(-m*x**2/(2*kb*T))
@@ -493,7 +647,9 @@ if __name__ == "__main__":
 #   scriptExperimentFrameCore1()
 #    scriptHeat2()
     script_core()
-    script1()
+#    plot_core_V_drift('exp_core_0.7_0.7_m_100.0_N_100000.0')
+#    plot_tau_distr('exp_core_0.7_0.7_m_100.0_N_100000.0')
+#    script1()
 
 #    fN='experimentHeat'
 #    plotExperimentHeat(fN)
