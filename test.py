@@ -8,220 +8,60 @@ from thermoSim import *
 import matplotlib.pyplot as plt
 import cPickle as pickle
 
-
-def script1():
-    #short script for running simulations for distribution of post-collision velocities.
-    a=[0.5,0.5]
-    fN='exp_molecule_'+str(a[0])+'_'+str(a[1])
-#    exp_pingpongOne(fN,N=1e6,a=a)
-    plot_molecule_V(fN)
-    
-def script_core():
-    b=[0.5,0.5]
-    m_core=10.
-    fN='exp_core_'+str(b[0])+'_'+str(b[1])+'_m_'+str(m_core)
-#    exp_coreOne(fN,N=1e6,b=b,m_core=m_core)
-    plot_molecule_V(fN)
-    plot_core_V(fN)
-
-def exp_pingpongOne(fN,N=1e6,a=[1,1]):
+def experimentOne(fN,N=1e6,a=[1,1]):
     params={'m':[1.,0.,0.],'T':[1e-1,1.],'L':1.,'D':0.,'d':0.,'a':a,'b':[0.,0.],
             'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}    
     pt=geometricPt(params=params)
     [pt.step() for n in xrange(int(N))]
-    ptDict={'t':np.array(pt.t),'xt':np.array(pt.xt),'vt':np.array(pt.vt),'wt':np.array(pt.wt),'params':params,'mu':np.array(pt.mu)}
+    ptDict={'t':np.array(pt.t),'vt':np.array(pt.vt).T[0],'wt':np.array(pt.wt),'params':params}
     pickle.dump(ptDict,open(fN+'.p','wr'))
-
-def exp_coreOne(fN,N=1e6,b=[1.,1.],m_core=1.):
-    params={'m':[1.,m_core,0.],'T':[1e-1,1.],'L':1.,'D':0.,'d':0.,'a':[0.5,0.5],'b':b,
-            'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}
-    pt=geometricPt(params=params)
-    [pt.step() for n in xrange(int(N))]
-    ptDict={'t':np.array(pt.t),'xt':np.array(pt.xt),'vt':np.array(pt.vt),'wt':np.array(pt.wt),'params':params,'mu':np.array(pt.mu)}
-    pickle.dump(ptDict,open(fN+'.p','wr'))
-
-
-def plot_molecule_V(fN):
-    # distribution of velocities of the molecule
-    ptd=pickle.load(open(fN+'.p','r'))
     
+    
+def plotExperimentOne(fN,a):
+    # distribution of post-collision velocities.
+    ptd=pickle.load(open(fN+'.p','r'))
     wt=ptd['wt']
     t=ptd['t']
-    xt=ptd['xt'].T[0]
-    vt=ptd['vt'].T[0]
+    vt=ptd['vt']
     params=ptd['params']
-    a=params['a']
-    Tc=params['T'][0]
-    Th=params['T'][1]
     mask_leftWall=wt==0
     mask_rightWall=wt==1
     v_leftWall=vt[mask_leftWall]
     v_rightWall=vt[mask_rightWall]
     t_leftWall=t[mask_leftWall]
-    t_rightWall=t[mask_rightWall]    
-    
-    
-    window=10000 #only consider data points beyond this <<<<<< later change this to time based
-    
-    suffix='postCollisionV'    
     fig=plt.figure()
     ax=fig.add_subplot(111)
     
+    window=10000
     freq, bin_edges=np.histogram(v_leftWall[window:],bins=100,normed=True)
     cenc=(bin_edges[:-1]+bin_edges[1:])/2
-    ax.plot(cenc,freq,'-b',lw=2,alpha=0.3,label='cold wall sim')
+    ax.plot(cenc,freq,'-b',lw=2,alpha=0.3)
     freq, bin_edges=np.histogram(-v_rightWall[window:],bins=100,normed=True)
     cenc=(bin_edges[:-1]+bin_edges[1:])/2
-    ax.plot(cenc,freq,'-r',lw=2,alpha=0.3, label='hot wall sim')
+    ax.plot(cenc,freq,'-r',lw=2,alpha=0.3)
     ax.set_ylabel('probability density')
-    ax.set_xlabel('velocity after collision')
-    ax.set_title(suffix+', alpha='+str(a))
-#    ax.set_xlim([0,3.5])
+    ax.set_xlabel('velocity after collision with left wall')
+    ax.set_xlim([0,3.5])
     x=np.linspace(0,max(np.abs(vt)),1000)    
     Tc=1e-1
     Th=1
     MBfun=lambda T: MBp(x,params['m'][0],T)
     pdf1=MBfun(Tc)
     pdf2=MBfun(Th)
-#    pdf3=(a[0]*MBfun(Tc)+a[1]*(1-a[0])*MBfun(Th))/(a[0]+a[1]-a[1]*a[0])
-    ax.plot(x,pdf1,'-b',lw=0.5, label='cold wall MB')
-    ax.plot(x,pdf2,'-r',lw=0.5, label='hot wall MB')
-#    ax.plot(x,pdf3,'-k',lw=0.5,label='theoretical prediction')
-    plt.legend()
-    plt.savefig(fN+'_'+suffix+'.pdf')
+    pdf3=(a[0]*MBfun(Tc)+a[1]*(1-a[0])*MBfun(Th))/(a[0]+a[1]-a[1]*a[0])
+    ax.plot(x,pdf1,'-b',lw=0.5)
+    ax.plot(x,pdf2,'-r',lw=0.5)
+    ax.plot(x,pdf3,'-k',lw=0.5)
+    plt.savefig(fN+'.pdf')
     plt.show()
 #    pdb.set_trace()    
     
-    suffix='spacialV'    
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    minV=min(vt)
-    maxV=max(vt)
-    nBin=100
-    bin_edges=np.arange(minV,maxV,(maxV-minV)/nBin)
-    freq=[]
-    t_denom=t[-1]-t[window]
-    vt_effective=vt[window:]
-    t_effective=np.diff(t)[window-1:]
-    for i in xrange(nBin-1):
-        idx=np.where((vt_effective<bin_edges[i+1])*(vt_effective>=bin_edges[i]))[0]
-        prob=np.sum(t_effective[idx])/t_denom
-        freq.append(prob)
-    
-    cenc=(bin_edges[:-1]+bin_edges[1:])/2
-    ax.plot(cenc,freq,'-k',lw=2,alpha=0.3,label='spacial V sim')
-    ax.set_ylabel('probability density')
-    ax.set_xlabel('time weighted velocity')
-    ax.set_title(suffix+', alpha='+str(a))
-#    ax.set_xlim([0,3.5])
-#    x=np.linspace(0,max(np.abs(vt)),1000)    
-#    Gaussianfun=lambda T: Gaussianp(x,params['m'][0],T)
-#    pdf1=MBfun(Tc)
-#    pdf2=MBfun(Th)
-#    pdf3=(a[0]*MBfun(Tc)+a[1]*(1-a[0])*MBfun(Th))/(a[0]+a[1]-a[1]*a[0])
-#    ax.plot(x,pdf1,'-b',lw=0.5, label='cold wall Gaussian')
-#    ax.plot(x,pdf2,'-r',lw=0.5, label='hot wall Gaussian')
-#    ax.plot(x,pdf3,'-k',lw=0.5,label='theoretical prediction')
-    plt.legend()
-    plt.savefig(fN+'_'+suffix+'.pdf')
-    plt.show()
-    
-def plot_core_V(fN):
-    # distribution of velocities of the core
-    ptd=pickle.load(open(fN+'.p','r'))
-    
-    wt=ptd['wt']
-    t=ptd['t']
-    xt=ptd['xt'].T[1]
-    vt=ptd['vt'].T[1]
-    params=ptd['params']
-    a=params['a']
-    Tc=params['T'][0]
-    Th=params['T'][1] 
-    
-    
-    window=10000 #only consider data points beyond this <<<<<< later change this to time based
-    
-    suffix='coreV'    
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    minV=min(vt)
-    maxV=max(vt)
-    nBin=100
-    bin_edges=np.arange(minV,maxV,(maxV-minV)/nBin)
-    freq=[]
-    t_denom=t[-1]-t[window]
-    vt_effective=vt[window:]
-    t_effective=np.diff(t)[window-1:]
-    for i in xrange(nBin-1):
-        idx=np.where((vt_effective<bin_edges[i+1])*(vt_effective>=bin_edges[i]))[0]
-        prob=np.sum(t_effective[idx])/t_denom
-        freq.append(prob)
-    
-    cenc=(bin_edges[:-1]+bin_edges[1:])/2
-    ax.plot(cenc,freq,'-k',lw=2,alpha=0.3,label='spacial V sim')
-    ax.set_ylabel('probability density')
-    ax.set_xlabel('time weighted core velocity')
-    ax.set_title(suffix)
-    plt.legend()
-    plt.savefig(fN+'_'+suffix+'.pdf')
-    plt.show()
-    
-def plot_molecule_pos(fN):
-    # spacial distribution of the molecule
-    ptd=pickle.load(open(fN+'.p','r'))
-    
-    wt=ptd['wt']
-    t=ptd['t']
-    xt_m=ptd['xt'].T[0]
-    xt_c=ptd['xt'].T[1]
-    vt_m=ptd['vt'].T[0]
-    vt_c=ptd['vt'].T[1]
-    params=ptd['params']
-    a=params['a']
-    Tc=params['T'][0]
-    Th=params['T'][1]
-    mask_leftWall=wt==0
-    mask_rightWall=wt==1
-    
-    suffix='posDensity'
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    
-    minX=0.
-    maxX=params['L']
-    nBin=100
-    bin_edges=np.arange(minV,maxV,(maxV-minV)/nBin)
-    freq=[]
-    t_denom=t[-1]-t[window]
-    xt_effective=xt[window:]
-    for i in xrange(nBin-1):
-        idx=np.where((xt_effective<bin_edges[i+1])*(xt_effective>=bin_edges[i]))[0]
-        prob=np.sum(t[idx])/t_denom
-        freq.append(prob)
-    pos=xt[window:]*np.diff(t)[window-1:]
-    freq, bin_edges=np.histogram(pos,bins=100,normed=True)
-    cenc=(bin_edges[:-1]+bin_edges[1:])/2
-    ax.plot(cenc,freq,'-k',lw=2,alpha=0.3,label='pos density sim')
-    ax.set_ylabel('probability density')
-    ax.set_xlabel('position')
-    ax.set_title(suffix+', alpha='+str(a))
-#    ax.set_xlim([0,3.5])
-#    x=np.linspace(0,max(np.abs(vt)),1000)    
-#    Gaussianfun=lambda T: Gaussianp(x,params['m'][0],T)
-#    pdf1=MBfun(Tc)
-#    pdf2=MBfun(Th)
-#    pdf3=(a[0]*MBfun(Tc)+a[1]*(1-a[0])*MBfun(Th))/(a[0]+a[1]-a[1]*a[0])
-#    ax.plot(x,pdf1,'-b',lw=0.5, label='cold wall Gaussian')
-#    ax.plot(x,pdf2,'-r',lw=0.5, label='hot wall Gaussian')
-#    ax.plot(x,pdf3,'-k',lw=0.5,label='theoretical prediction')
-    plt.legend()
-    plt.savefig(fN+'_'+suffix+'.pdf')
-    plt.show()
-
-
-#def Gaussianp(x,m,T,kb=1):
-#    return m/(kb*T)*x*np.exp(-m*x**)
+def script1():
+    #short script for running simulations for distribution of post-collision velocities.
+    a=[0.3,0.3]
+    fN='experimentOne_'+str(a[0])+'_'+str(a[1])
+#    experimentOne(fN,N=1e6,a=a)
+    plotExperimentOne(fN,a)
 
 def MBp(x,m,T,kb=1):
     return m/(kb*T)*x*np.exp(-m*x**2/(2*kb*T))
@@ -254,8 +94,8 @@ def plotExperimentHeat(fN):
     
     
 #    stringList=('qlr','qrr','sr','ql','qr','s')
-    stringList=('s','sr','ql')
-#    pdb.set_trace()
+    stringList=('sr','ql')
+    pdb.set_trace()
     for i in xrange(len(stringList)):
         fig=plt.figure()
         ax=fig.add_subplot(111)
@@ -263,25 +103,15 @@ def plotExperimentHeat(fN):
         ax.set_ylabel(stringList[i])
         ax.set_xlabel('alpha')
         ax.set_xscale('log')
-        if stringList[i]=='sr' :
+        if stringList[i]=='sr':
             num=100
             alpha1=np.linspace(heatD['a'][0][0],heatD['a'][0][-1],num)
             alpha2=np.linspace(heatD['a'][1][0],heatD['a'][1][-1],num)
             T1=heatD['params'][0]['T'][0]
             T2=heatD['params'][0]['T'][1]
             sr_p=srPred(alpha1,alpha2,T1,T2)
-            ax.plot(alpha2,sr_p,'-k',lw=1)
-        if stringList[i]=='s':
-            num=100
-            alpha1=np.linspace(heatD['a'][0][0],heatD['a'][0][-1],num)
-            alpha2=np.linspace(heatD['a'][1][0],heatD['a'][1][-1],num)
-            T1=heatD['params'][0]['T'][0]
-            T2=heatD['params'][0]['T'][1]
-            sr_p=srPred(alpha1,alpha2,T1,T2)
-            data=heatD[stringList[i]]
-            const=data[-1]/sr_p[-1]
-            pred=sr_p*const
-            ax.plot(alpha2,pred,'-k',lw=1)
+            ax.plot(alpha2,sr_p,'-k',lw=5,alpha=0.4)
+#            pdb.set_trace()
         if stringList[i]=='ql':
             num=100
             alpha1=np.linspace(heatD['a'][0][0],heatD['a'][0][-1],num)
@@ -291,7 +121,7 @@ def plotExperimentHeat(fN):
             pred=heatPred(alpha1,alpha2,T1,T2)
             data=heatD[stringList[i]]
             pred=pred*data[-1]/pred[-1]
-            ax.plot(alpha2,pred,'-k',lw=1)
+            ax.plot(alpha2,pred,'-k',lw=5,alpha=0.4)
         plt.savefig(fN+'_'+stringList[i]+'.pdf')
     plt.show()
 
@@ -491,9 +321,7 @@ def experimentFrameCore4(fN,N=1e6,force=[1]):
 if __name__ == "__main__":
 #    scriptExperimentFrameCoreQLR()
 #   scriptExperimentFrameCore1()
-#    scriptHeat2()
-    script_core()
-    script1()
+    scriptHeat2()
 
 #    fN='experimentHeat'
 #    plotExperimentHeat(fN)
