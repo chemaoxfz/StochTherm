@@ -44,7 +44,9 @@ class geometricPt:
         
         mu=np.sqrt(m/np.sum(m))
         self.mu=mu
-        if 'force' not in params.keys():
+        if self.params['accelFlag']=='none':
+            self.aFunc=[]
+        elif 'force' not in params.keys():
             self.aFunc=self.accelFunc(flag=params['accelFlag'],arg=np.array(params['accel'])*self.mu)
         else: self.aFunc=self.accelFunc(flag=params['accelFlag'],arg=np.array(params['force'])/self.params['m']*self.mu)
         #Order of walls:L,R, Ur,Lr, F,B, FUr,FLr, FUrE,FLrE.
@@ -312,10 +314,12 @@ class geometricPt:
         plt.ion()
         return fig,ax
         
-    def heatTransfer(self):
-        leftHT_idx=np.where((np.array(self.wt)==0)*(np.array(self.st)==1))[0]
-        rightHT_idx=np.where((np.array(self.wt)==1)*(np.array(self.st)==1))[0]
-        vt_molecule=np.array(self.vt).T[0]
+    def heatTransfer(self,init_cutoff=0):
+        wt=np.array(self.wt[init_cutoff:])
+        st=np.array(self.st[init_cutoff:])
+        vt_molecule=np.array(self.vt[init_cutoff:]).T[0]/self.mu[0]
+        leftHT_idx=np.where(wt==0*st==1)[0]
+        rightHT_idx=np.where(wt==1*st==1)[0]
         leftQ=np.zeros(len(vt_molecule))
         rightQ=np.zeros(len(vt_molecule))
         leftQ[leftHT_idx[1:]]=vt_molecule[leftHT_idx[1:]]**2-vt_molecule[leftHT_idx[1:]-1]**2

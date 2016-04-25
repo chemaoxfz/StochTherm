@@ -7,127 +7,186 @@ Created on Fri Dec 18 08:50:44 2015
 from thermoSim import *
 import matplotlib.pyplot as plt
 import cPickle as pickle
+import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 
 def script_core(runName='exp_core'):
     ####### Set Parameter List #######
-    b_list=[[.1,.1],[0.2,0.2],[.3,.3],[.4,.4],[0.5,0.5],[.6,.6],[.7,.7],[.8,.8],[.9,.9]]
-    m_core_list=[[1.,.125],[1.,.25],[1.,.5],[1.,1.],[1.,2.],[1.,4.],[1.,8.],[1.,16.],[1.,32.],[1.,64.],[1.,128.]]
-    T_list=[[.001,1.],[.01,1.],[.1,1.],[1.,1.],[10.,1.],[100.,1.],[1000.,1.]]
+#    b_list=[[.1,.1],[0.2,0.2],[.3,.3],[.4,.4],[0.5,0.5],[.6,.6],[.7,.7],[.8,.8],[.9,.9]]
+    b_list=[[.1,.1],[.2,.2]]
+    b_name=runName+'_b'
+#    m_core_list=[[1.,.125],[1.,.25],[1.,.5],[1.,1.],[1.,2.],[1.,4.],[1.,8.],[1.,16.],[1.,32.],[1.,64.],[1.,128.]]
+    m_core_list=[[1.,.125]]
+    m_name=runName+'_mCore'
+#    T_list=[[.001,1.],[.01,1.],[.1,1.],[1.,1.],[10.,1.],[100.,1.],[1000.,1.]]
+    T_list=[[.001,1.]]
+    T_name=runName+'_T'
 #    b_list=[[0.7,0.7]]
 #    m_core_list=[100.]
-    N=1e6
+    N=20
     b_canon=[.5,.5]
     m_core_canon=[1.,16.]
     T_canon=[.1,1.]
     
     # Create args list
-    fN_gen=lambda args:'exp_core_b_'+str(args[0][0])+'_'+str(args[0][1])+'_m_'+str(args[1][0])+'_'+str(args[1][1])+'_T_'+str(args[2][0])+'_'+str(args[2][1])+'_N_'+str(N)
+#    fN_gen=lambda args:'exp_core_b_'+str(args[0][0])+'_'+str(args[0][1])+'_m_'+str(args[1][0])+'_'+str(args[1][1])+'_T_'+str(args[2][0])+'_'+str(args[2][1])+'_N_'+str(N)
     rep_gen=lambda canon,lst: [canon for i in xrange(len(lst))]
-    axis_config=lambda arr: np.rollaxis(np.swapaxes(arr,0,2),1)
     l_t=lambda l:map(list,zip(*l))
     m_core_args=l_t([rep_gen(b_canon,m_core_list), m_core_list, rep_gen(T_canon,m_core_list)])
     b_args=l_t([b_list,rep_gen(m_core_canon,b_list),rep_gen(T_canon,b_list)])
     T_args=l_t([rep_gen(b_canon,T_list),rep_gen(m_core_canon,T_list),T_list])
     args_param=b_args+m_core_args+T_args
-    args_fN=map(fN_gen,args_param)
-    [x.insert(0,fN) for fN,x in zip(args_fN,args_param)]
-    args_list=args_param 
-    pickle.dump({'args_list':args_list,'N':N},open(runName+'.p','wr'))
-    
-    # run to get results
+#    [x.insert(0,fN) for fN,x in zip(args_fN,args_param)]
+    args_list=args_param
+#    
+#    ###############################
+#    # run to get results
     pool=Pool(len(args_list))
+#    pdb.set_trace()
     results=pool.map(exp_coreOne_star,args_list)
+    fN_results_distr=runName+'_results_distr'
+    fN_results_running=runName+'_results_running'
+    runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarNames':['b','T_left','m_core'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list,'N':N}
+    runDict_results_distr=[x[0] for x in results]
+    runDict_results_running=pd.DataFrame([x[1] for x in results])
+    pdb.set_trace()
+    pickle.dump(runDict_results_distr,open(fN_results_distr+'.p','wr'))
+    runDict_results_running.to_csv(fN_results_running+'.csv')
+    pickle.dump(runDict_params,open(runName+'.p','wr'))
     
-    # plot results
+    
+    summaryPlot_core(runDict_params)
+
+
+def summaryPlot_core(runDict):
+    if isinstance(runDict,str):
+        runDict=pickle.load(open(runDict+'.p','rU'))
+    argIdx=0
+    distr=pickle.load(open(runDict['results_distr']+'.p','rU'))
+    running=pd.DataFrame.from_csv(runDict['results_running']+'.csv')
+    for run_name,num_args,var,var_name in zip(runDict['runNames'],runDict['num_args'],runDict['runVars'],runDict['runVarNames']):
+        relVars=[x[var[0]][var[1]] for x in runDict['args_list'][argIdx:argIdx+num_args]]
+        relDistr=distr[argIdx:argIdx+num_args]
+        relRunning=running.loc[argIdx:argIdx+num_args]
+        pdb.set_trace()
+        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,40])
+        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,100])
+        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='vDrift')
+#        summaryPlot_core_qlr(relevantVars,relevantResults,run_name,var_name)
+#        summaryPlot_core_sr(relevantVars,relevantResults,run_name,var_name)
+        argIdx+=num_args
+#        pdb.set_trace()
+
+def summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='vDrift'):
+    suffix=run_name+'_'+ylabel+'_'+var_name
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    
+    for rlt,var in zip(relRunning,relVars):
+        pdb.set_trace()
+        ax.plot(rlt['t'],rlt[ylabel],lw=1,label=str(var))
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel('time after init cutoff')
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    plt.savefig(suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
     
 
-def exp_coreOne_star(ar):
-    kw={'N':1e6,'b':ar[1],'m_core':ar[2],'T':ar[3]}
+def summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,20]):
+    suffix=run_name+'_'+xlabel+'_'+var_name
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
     
-    return exp_coreOne(ar[0],**kw)
+    nBin=100
+    for rlt,var in zip(relDistr,relVars):
+        freq, bin_edges=np.histogram(rlt[xlabel],bins=nBin,normed=True,range=rg)
+        cenc=(bin_edges[:-1]+bin_edges[1:])/2
+        ax.plot(cenc,freq,lw=1,label=str(var))
+    ax.set_ylabel('prob density')
+    ax.set_xlabel(xlabel)
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    plt.savefig(suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+
+def exp_coreOne_star(ar):
+    kw={'N':1e4,'b':ar[0],'m_core':ar[1],'T':ar[2]}
+    
+    return exp_coreOne(**kw)
  
-def exp_coreOne(fN,N=1e6,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
+def exp_coreOne(N=1e6,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
     params={'m':[m_core[0],m_core[1],0.],'T':T,'L':1.,'D':1e-7,'d':0.,'a':[0.5,0.5],'b':b,
             'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}
     pt=geometricPt(params=params)
     [pt.step() for n in xrange(int(N))]
-
-    result=summaryCalc_core(pt)
-    return result
-
-def script_test():
-    result=exp_coreOne('test',N=2e6,b=[1.,1.])
-    
+    result_distr,result_running=summaryCalc_core(pt)
+    return result_distr,result_running
 
 def summaryCalc_core(pt):
-    #Calculate the following: tau, dist, v_drift, ht_rate, ep_rate
-    result=dict.fromkeys(['tau','dist','v_drift','ht_rate','ep_rate']
-    tau=summaryCalc_distr_tau(pt)
-    pdb.set_trace() 
-
-    #Calculate coarse-graining distribtion results
+    init_cutoff=10
+    # Calculate the following: tau, dist, v_drift, ht_rate, ep_rate
+    l=len(pt.t)-init_cutoff
+    result_distr=dict.fromkeys(['tau','dist'])
+    result_running=pd.DataFrame(np.nan,columns=['v_drift','ht_rate_left','ht_rate_right','ep_rate','t'],index=np.arange(l-1))
+    result_distr['tau'],result_distr['dist']=summaryCalc_distr(pt,init_cutoff)
+    result_running['v_drift'],result_running['ht_rate_left'],result_running['ht_rate_right'],result_running['ep_rate']=summaryCalc_running(pt,init_cutoff)
+    result_running['t']=np.array(pt.t[init_cutoff+1:])
+    
+    # Calculate coarse-graining distribtion results
     # given del_t, a coarse-graining time scale, what is the distribution of v_drift, ht_rate, and ep_rate?
-    coarsen_fold=[1,10,100]
-    result2=dict.fromkeys(['del_t','v_drift','ht_rate','ep_rate'])
+#    coarsen_fold=[1,10,100]
+#    result2=dict.fromkeys(['del_t','v_drift','ht_rate','ep_rate'])
 
+    return result_distr,result_running
 
+def summaryCalc_running(pt,init_cutoff):
+    
+    t=np.array(pt.t[init_cutoff+1:])-pt.t[init_cutoff]
+    vt=np.array(pt.vt[init_cutoff:]).T
+    vt_core=vt[1][1:]/pt.mu[1]
+    vt_molecule=vt[0]/pt.mu[0]
+    wt=np.array(pt.wt[init_cutoff+1:])
+    st=np.array(pt.st[init_cutoff+1:])
 
-def plot_core_V_drift(fN):
-    # 1. time-averaged velocity of the core as time increases
-    
-    
-    ptd=pickle.load(open(fN+'.p','r'))
-    t=ptd['t']
-    vt=np.array(ptd['vt'].T[1])
+    leftHT_idx=np.where(np.logical_and(wt==0,st==1))[0]
+    rightHT_idx=np.where(np.logical_and(wt==1,st==1))[0]
+    #do [1:] to avoid first one, might index out of bound
+    leftQ=np.zeros(len(wt))
+    rightQ=np.zeros(len(wt))
+    leftQ[leftHT_idx]=vt_molecule[leftHT_idx+1]**2-vt_molecule[leftHT_idx]**2
+    #positive heat is heat given from wall to molecule, i.e. added into system
+    rightQ[rightHT_idx]=vt_molecule[rightHT_idx+1]**2-vt_molecule[rightHT_idx]**2
+    leftQ_cum=np.cumsum(leftQ)
+    rightQ_cum=np.cumsum(rightQ)
+    #note that leftQ is negative and rightQ is positive, due to left is code and right is hot
+    # and that we consider heat flow into the particle is positive
+    S_cum=-leftQ_cum/pt.params['T'][0]-rightQ_cum/pt.params['T'][1]
+    lqr=leftQ_cum/t
+    rqr=rightQ_cum/t
+    sr=S_cum/t
+    v_drift=np.cumsum(vt_core)/t
+    return v_drift,lqr,rqr,sr
 
-    init_cutoff=100   
-    t=t[init_cutoff:]
-    vt=vt[init_cutoff:]
-    
-    suffix='core_driftV'
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    v_bar=np.cumsum(vt)/t
-    t_diff=np.diff(t)
-    v_std=[np.sum(t_diff[:i+1]*(vt[:i+1]-v_bar[i])**2/t[i])**(0.5) for i in xrange(len(v_bar)-1)]
-    ax.plot(t,v_bar,'-k',lw=2,label='dift core V')
-    ax.fill_between(t[:-1],v_bar[:-1]-v_std,v_bar[:-1]+v_std,alpha=0.3)
-    ax.set_ylabel('velocity')
-    ax.set_xlabel('time')
-    ax.set_title(suffix)
-    plt.legend()
-    plt.savefig(fN+'_'+suffix+'.pdf')   
+def summaryCalc_sliding(pt,del_t):
+    pass
 
-
-def plot_core_V_drift_comparison(fN_compare,fN_list):
-    # 1. time-averaged velocity of the core as time increases
-    # compare multiple fN
-    
-    suffix='core_driftV_comparison'
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    
-    for fN in fN_list:
-        ptd=pickle.load(open(fN+'.p','r'))
-        t=ptd['t']
-        vt=np.array(ptd['vt'].T[1])/ptd['mu'][1]
-    
-        init_cutoff=10000   
-        t=t[init_cutoff:]
-        vt=vt[init_cutoff:]
-        v_bar=np.cumsum(vt)/t
-        t_diff=np.diff(t)
-#        v_std=[np.sum(t_diff[:i+1]*(vt[:i+1]-v_bar[i])**2/t[i])**(0.5) for i in xrange(len(v_bar)-1)]
-        ax.plot(t,v_bar,lw=2,label=fN)
-#        ax.fill_between(t[:-1],v_bar[:-1]-v_std,v_bar[:-1]+v_std,alpha=0.3)
-    ax.set_ylabel('velocity')
-    ax.set_xlabel('time')
-    ax.set_title(suffix)
-    handles, labels = ax.get_legend_handles_labels()
-    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
-    plt.savefig(fN_compare+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+def summaryCalc_distr(pt,init_cutoff):
+    # tau is time between two consecutive collisions between molecule and frame
+    # we plot distribution of tau for all times
+    t=np.array(pt.t[init_cutoff:])-pt.t[init_cutoff]
+    xt=np.array(pt.xt_noncyclic).T[1][init_cutoff:]/pt.mu[1]
+    wt=np.array(pt.wt)[init_cutoff:]
+    st=np.array(pt.st)[init_cutoff:]
+    # w=8,9,12,13 corresponds to collision between molecule and frame
+    mask=np.where(np.logical_and(np.logical_or(np.logical_or(np.logical_or(wt==8,wt==9),wt==12),wt==13),st==1))[0]
+    t_hit=t[mask]
+    xt_hit=xt[mask]
+    tau=np.diff(t_hit)
+    dist=np.diff(xt_hit)
+    return tau,dist
 
 
 def plot_core_V_sliding(fN):
@@ -158,54 +217,6 @@ def plot_core_V_sliding(fN):
     plt.legend()
     plt.savefig(fN+'_'+suffix+'.pdf') 
 
-def summaryCalc_distr_tau(pt):
-    # tau is time between two consecutive collisions between molecule and frame
-    # we plot distribution of tau for all times
-    init_cutoff=10000 
-    t=pt.t[init_cutoff:]
-    wt=pt.wt[init_cutoff:]
-    st=pt.st[init_cutoff:]
-    # w=8,9,12,13 corresponds to collision between molecule and frame
-    mask=np.where(np.logical_and(np.logical_or(np.logical_or(np.logical_or(wt==8,wt==9),wt==12),wt==13)),st==1)[0]
-    t_hit=t[mask]
-    tau=np.diff(t_hit)
-    
-    suffix='tau'    
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    nBin=100
-    
-    freq, bin_edges=np.histogram(tau,bins=nBin,normed=False,range=[0,10])
-    cenc=(bin_edges[:-1]+bin_edges[1:])/2
-
-    return freq,cenc
-
-
-def plot_tau_distr_comparison(fN_compare,fN_list):
-    suffix='tau_distr_comparison_closer'
-    fig=plt.figure()
-    ax=fig.add_subplot(111)
-    
-    nBin=100
-    rg=[0,5]
-    for fN in fN_list:
-        init_cutoff=10000 
-        ptd=pickle.load(open(fN+'.p','r'))
-        t=ptd['t'][init_cutoff:]
-        wt=ptd['wt'][init_cutoff:]
-        mask=np.where(np.logical_or(np.logical_or(np.logical_or(wt==8,wt==9),wt==12),wt==13))[0]
-        t_hit=t[mask]
-        tau=np.diff(t_hit)
-        freq, bin_edges=np.histogram(tau,bins=nBin,normed=False,range=rg)
-        cenc=(bin_edges[:-1]+bin_edges[1:])/2
-        ax.plot(cenc,freq,lw=2,label=fN)
-    ax.set_ylabel('prob density')
-    ax.set_xlabel('tau')
-    ax.set_title(suffix)
-    handles, labels = ax.get_legend_handles_labels()
-    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
-    plt.savefig(fN_compare+'_'+suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
-
 
 def plot_core_V(fN):
     # distribution of velocities of the core
@@ -213,7 +224,6 @@ def plot_core_V(fN):
     
     wt=ptd['wt']
     t=ptd['t']
-    xt=ptd['xt'].T[1]
     vt=ptd['vt'].T[1]
     params=ptd['params']
     a=params['a']
@@ -562,6 +572,7 @@ if __name__ == "__main__":
 #   scriptExperimentFrameCore1()
 #    scriptHeat2()
     script_core()
+#    exp_coreOne(N=1e2)
 #    plot_core_V_drift('exp_core_0.7_0.7_m_100.0_N_100000.0')
 #    plot_tau_distr('exp_core_0.7_0.7_m_100.0_N_100000.0')
 #    script1()
