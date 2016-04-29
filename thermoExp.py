@@ -13,17 +13,25 @@ from multiprocessing import Pool
 
 def script_core(runName='exp_core'):
     ####### Set Parameter List #######
-#    b_list=[[.1,.1],[0.2,0.2],[.3,.3],[.4,.4],[0.5,0.5],[.6,.6],[.7,.7],[.8,.8],[.9,.9]]
-    b_list=[[.1,.1],[.2,.2]]
+    n_b=10
+    bb=np.linspace(0,1,n_b)
+    b_list=np.ones((n_b,2))
+    b_list.T[0]=bb
+    b_list.T[1]=bb
     b_name=runName+'_b'
-#    m_core_list=[[1.,.125],[1.,.25],[1.,.5],[1.,1.],[1.,2.],[1.,4.],[1.,8.],[1.,16.],[1.,32.],[1.,64.],[1.,128.]]
-    m_core_list=[[1.,.125]]
+    
+    n_m=10
+    m_core=np.logspace(-3,3,n_m)
+    m_core_list=np.ones((n_m,2))
+    m_core_list.T[1]=m_core
     m_name=runName+'_mCore'
-#    T_list=[[.001,1.],[.01,1.],[.1,1.],[1.,1.],[10.,1.],[100.,1.],[1000.,1.]]
-    T_list=[[.001,1.]]
+
+    n_T=10
+    tt=np.linspace(1e-3,1000,n_T)
+    T_list=np.ones((n_T,2))
+    T_list.T[0]=tt
     T_name=runName+'_T'
-#    b_list=[[0.7,0.7]]
-#    m_core_list=[100.]
+    
     N=20
     b_canon=[.5,.5]
     m_core_canon=[1.,16.]
@@ -47,50 +55,67 @@ def script_core(runName='exp_core'):
     results=pool.map(exp_coreOne_star,args_list)
     fN_results_distr=runName+'_results_distr'
     fN_results_running=runName+'_results_running'
-    runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarNames':['b','T_left','m_core'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list,'N':N}
+    runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarNames':['b','m_core','T_left'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list,'N':N}
     runDict_results_distr=[x[0] for x in results]
-    runDict_results_running=pd.DataFrame([x[1] for x in results])
-    pdb.set_trace()
-    pickle.dump(runDict_results_distr,open(fN_results_distr+'.p','wr'))
-    runDict_results_running.to_csv(fN_results_running+'.csv')
+#    runDict_results_running=pd.DataFrame([x[1] for x in results])
+    runDict_results_running=[x[1] for x in results]
+#    pickle.dump(runDict_results_distr,open(fN_results_distr+'.p','wr'))
+#    runDict_results_running.to_csv(fN_results_running+'.csv')
     pickle.dump(runDict_params,open(runName+'.p','wr'))
     
-    
-    summaryPlot_core(runDict_params)
+    summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
 
 
-def summaryPlot_core(runDict):
+def summaryPlot_core(runDict,distr,running):
     if isinstance(runDict,str):
         runDict=pickle.load(open(runDict+'.p','rU'))
     argIdx=0
-    distr=pickle.load(open(runDict['results_distr']+'.p','rU'))
-    running=pd.DataFrame.from_csv(runDict['results_running']+'.csv')
+#    distr=pickle.load(open(runDict['results_distr']+'.p','rU'))
+#    running=pd.DataFrame.from_csv(runDict['results_running']+'.csv')
     for run_name,num_args,var,var_name in zip(runDict['runNames'],runDict['num_args'],runDict['runVars'],runDict['runVarNames']):
         relVars=[x[var[0]][var[1]] for x in runDict['args_list'][argIdx:argIdx+num_args]]
         relDistr=distr[argIdx:argIdx+num_args]
-        relRunning=running.loc[argIdx:argIdx+num_args]
-        pdb.set_trace()
+        relRunning=running[argIdx:argIdx+num_args]
         summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,40])
-        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,100])
-        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='vDrift')
-#        summaryPlot_core_qlr(relevantVars,relevantResults,run_name,var_name)
-#        summaryPlot_core_sr(relevantVars,relevantResults,run_name,var_name)
+        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,20])
+        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
+        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left')
+        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ep_rate')
+        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift')
+#        summaryPlot_core_sliding()
+#        summaryPlot_core_slidingDistr()
         argIdx+=num_args
 #        pdb.set_trace()
 
-def summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='vDrift'):
+def summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift'):
+    suffix=run_name+'_'+ylabel+'_'+var_name+'_endValue'
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    x=[]
+    y=[]
+    for rlt,var in zip(relRunning,relVars):
+        y.append(rlt[ylabel][rlt[ylabel].index[-1]])
+        x.append(var)
+    ax.plot(x,y,'-o',lw=2,label=str(var))
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel(var_name)
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=3,mode='expand',borderaxespad=0.)
+    plt.savefig(suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+
+def summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift'):
     suffix=run_name+'_'+ylabel+'_'+var_name
     fig=plt.figure()
     ax=fig.add_subplot(111)
     
     for rlt,var in zip(relRunning,relVars):
-        pdb.set_trace()
         ax.plot(rlt['t'],rlt[ylabel],lw=1,label=str(var))
     ax.set_ylabel(ylabel)
     ax.set_xlabel('time after init cutoff')
     ax.set_title(suffix)
     handles, labels = ax.get_legend_handles_labels()
-    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=3,mode='expand',borderaxespad=0.)
     plt.savefig(suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
     
 
@@ -108,26 +133,32 @@ def summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0
     ax.set_xlabel(xlabel)
     ax.set_title(suffix)
     handles, labels = ax.get_legend_handles_labels()
-    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=1,mode='expand',borderaxespad=0.)
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=3,mode='expand',borderaxespad=0.)
     plt.savefig(suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
 
 
 def exp_coreOne_star(ar):
-    kw={'N':1e4,'b':ar[0],'m_core':ar[1],'T':ar[2]}
-    
+    kw={'mode':'time','N':1e4,'b':ar[0],'m_core':ar[1],'T':ar[2]}
+    # mode='time' or 'step'
     return exp_coreOne(**kw)
  
-def exp_coreOne(N=1e6,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
+def exp_coreOne(mode='time',N=1e2,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
     params={'m':[m_core[0],m_core[1],0.],'T':T,'L':1.,'D':1e-7,'d':0.,'a':[0.5,0.5],'b':b,
             'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}
     pt=geometricPt(params=params)
-    [pt.step() for n in xrange(int(N))]
+    if mode=='step':
+        [pt.step() for n in xrange(int(N))]
+    elif mode=='time':
+        while pt.t[-1]<N: pt.step()
+    else: raise ValueError('invalid mode for exp_core_One. Either time or step')
     result_distr,result_running=summaryCalc_core(pt)
     return result_distr,result_running
 
 def summaryCalc_core(pt):
-    init_cutoff=10
+    init_cutoff_time=1
     # Calculate the following: tau, dist, v_drift, ht_rate, ep_rate
+    mask=np.where(pt.t>init_cutoff_time)[0]
+    init_cutoff=np.max(mask)
     l=len(pt.t)-init_cutoff
     result_distr=dict.fromkeys(['tau','dist'])
     result_running=pd.DataFrame(np.nan,columns=['v_drift','ht_rate_left','ht_rate_right','ep_rate','t'],index=np.arange(l-1))
@@ -568,10 +599,12 @@ def experimentFrameCore4(fN,N=1e6,force=[1]):
 #then try to figure out a way to compute diffusion coefficient from these. Supposedly distribution of position? Velocity? 
 # Yeah, velocity. velocity. Read gillespie article.
 if __name__ == "__main__":
+    plt.rcParams['image.cmap']='inferno'
 #    scriptExperimentFrameCoreQLR()
 #   scriptExperimentFrameCore1()
 #    scriptHeat2()
-    script_core()
+    script_core(runName='test')
+#    script_core()
 #    exp_coreOne(N=1e2)
 #    plot_core_V_drift('exp_core_0.7_0.7_m_100.0_N_100000.0')
 #    plot_tau_distr('exp_core_0.7_0.7_m_100.0_N_100000.0')
