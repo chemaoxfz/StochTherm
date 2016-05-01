@@ -13,26 +13,30 @@ from multiprocessing import Pool
 
 def script_core(runName='exp_core'):
     ####### Set Parameter List #######
+    dur=1e6
+
     n_b=10
     bb=np.linspace(0,1,n_b)
     b_list=np.ones((n_b,2))
     b_list.T[0]=bb
     b_list.T[1]=bb
     b_name=runName+'_b'
+    b_scale='linear'
     
     n_m=10
     m_core=np.logspace(-3,3,n_m)
     m_core_list=np.ones((n_m,2))
     m_core_list.T[1]=m_core
     m_name=runName+'_mCore'
+    m_scale='log'
 
     n_T=10
     tt=np.linspace(1e-3,1000,n_T)
     T_list=np.ones((n_T,2))
     T_list.T[0]=tt
     T_name=runName+'_T'
+    T_scale='linear'
     
-    N=20
     b_canon=[.5,.5]
     m_core_canon=[1.,16.]
     T_canon=[.1,1.]
@@ -47,7 +51,7 @@ def script_core(runName='exp_core'):
     args_param=b_args+m_core_args+T_args
 #    [x.insert(0,fN) for fN,x in zip(args_fN,args_param)]
     args_list=args_param
-#    
+    args_list=[x+[dur] for x in args_list]
 #    ###############################
 #    # run to get results
     pool=Pool(len(args_list))
@@ -55,7 +59,7 @@ def script_core(runName='exp_core'):
     results=pool.map(exp_coreOne_star,args_list)
     fN_results_distr=runName+'_results_distr'
     fN_results_running=runName+'_results_running'
-    runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarNames':['b','m_core','T_left'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list,'N':N}
+    runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarScales':[b_scale,m_scale,T_scale],'runVarNames':['b','m_core','T_left'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list}
     runDict_results_distr=[x[0] for x in results]
 #    runDict_results_running=pd.DataFrame([x[1] for x in results])
     runDict_results_running=[x[1] for x in results]
@@ -72,22 +76,24 @@ def summaryPlot_core(runDict,distr,running):
     argIdx=0
 #    distr=pickle.load(open(runDict['results_distr']+'.p','rU'))
 #    running=pd.DataFrame.from_csv(runDict['results_running']+'.csv')
-    for run_name,num_args,var,var_name in zip(runDict['runNames'],runDict['num_args'],runDict['runVars'],runDict['runVarNames']):
+    for run_name,num_args,var,var_name,var_scale in zip(runDict['runNames'],runDict['num_args'],runDict['runVars'],runDict['runVarNames'],runDict['runVarScales']):
         relVars=[x[var[0]][var[1]] for x in runDict['args_list'][argIdx:argIdx+num_args]]
         relDistr=distr[argIdx:argIdx+num_args]
         relRunning=running[argIdx:argIdx+num_args]
-        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,40])
-        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,20])
-        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
-        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left')
-        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ep_rate')
-        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift')
+        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,4])
+        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,5])
+#        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
+#        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left')
+#        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ep_rate')
+        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift',xscale=var_scale)
+        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left',xscale=var_scale)
+        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='ep_rate',xscale=var_scale)
 #        summaryPlot_core_sliding()
 #        summaryPlot_core_slidingDistr()
         argIdx+=num_args
 #        pdb.set_trace()
 
-def summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift'):
+def summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift',xscale='log'):
     suffix=run_name+'_'+ylabel+'_'+var_name+'_endValue'
     fig=plt.figure()
     ax=fig.add_subplot(111)
@@ -96,9 +102,10 @@ def summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_dri
     for rlt,var in zip(relRunning,relVars):
         y.append(rlt[ylabel][rlt[ylabel].index[-1]])
         x.append(var)
-    ax.plot(x,y,'-o',lw=2,label=str(var))
+    ax.plot(x,y,'-o',lw=2,label=ylabel)
     ax.set_ylabel(ylabel)
     ax.set_xlabel(var_name)
+    ax.set_xscale(xscale)
     ax.set_title(suffix)
     handles, labels = ax.get_legend_handles_labels()
     lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=3,mode='expand',borderaxespad=0.)
@@ -138,7 +145,7 @@ def summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0
 
 
 def exp_coreOne_star(ar):
-    kw={'mode':'time','N':1e4,'b':ar[0],'m_core':ar[1],'T':ar[2]}
+    kw={'mode':'time','N':ar[3],'b':ar[0],'m_core':ar[1],'T':ar[2]}
     # mode='time' or 'step'
     return exp_coreOne(**kw)
  
