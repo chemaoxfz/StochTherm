@@ -58,17 +58,16 @@ def script_core(runName='exp_core',dur=1e6):
 #    ###############################
 #    # run to get results
     pool=Pool(len(args_list))
-#    pdb.set_trace()
     results=pool.map(exp_coreOne_star,args_list)
+#    results=[exp_coreOne_star(args_list[0])]
     fN_results_distr=runName+'_results_distr'
     fN_results_running=runName+'_results_running'
     runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarScales':[b_scale,m_scale,T_scale],'runVarNames':['b','m_core','T_left'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list}
-    runDict_results_distr=[x[0] for x in results]
-#    runDict_results_running=pd.DataFrame([x[1] for x in results])
-    runDict_results_running=[x[1] for x in results]
-#    pickle.dump(runDict_results_distr,open(fN_results_distr+'.p','wr'))
-#    runDict_results_running.to_csv(fN_results_running+'.csv')
     pickle.dump(runDict_params,open(runName+'.p','wr'))
+    runDict_results_distr=[x[0] for x in results]
+    pickle.dump({'distr':runDict_results_distr},open(fN_results_distr+'.p','wr'))
+    runDict_results_running=[x[1] for x in results]
+    pickle.dump({'running':runDict_results_running},open(fN_results_running+'.p','wr'))
     
     summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
 
@@ -85,6 +84,7 @@ def summaryPlot_core(runDict,distr,running):
         relRunning=running[argIdx:argIdx+num_args]
         summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,4])
         summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,5])
+        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='eta',rg=[0,10])
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left')
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ep_rate')
@@ -170,9 +170,9 @@ def summaryCalc_core(pt):
     mask=np.where(pt.t>init_cutoff_time)[0]
     init_cutoff=np.max(mask)
     l=len(pt.t)-init_cutoff
-    result_distr=dict.fromkeys(['tau','dist'])
+    result_distr=dict.fromkeys(['tau','dist','eta'])
     result_running=pd.DataFrame(np.nan,columns=['v_drift','ht_rate_left','ht_rate_right','ep_rate','t'],index=np.arange(l-1))
-    result_distr['tau'],result_distr['dist']=summaryCalc_distr(pt,init_cutoff)
+    result_distr['tau'],result_distr['dist'],result_distr['eta']=summaryCalc_distr(pt,init_cutoff)
     result_running['v_drift'],result_running['ht_rate_left'],result_running['ht_rate_right'],result_running['ep_rate']=summaryCalc_running(pt,init_cutoff)
     result_running['t']=np.array(pt.t[init_cutoff+1:])
     
@@ -227,8 +227,32 @@ def summaryCalc_distr(pt,init_cutoff):
     xt_hit=xt[mask]
     tau=np.diff(t_hit)
     dist=np.diff(xt_hit)
-    return tau,dist
+    eta=etaCalc(t,wt)
+    return tau,dist,eta
 
+
+def etaCalc(t,wt):
+    t0=t[wt==0]
+    t1=t[wt==1]
+    t0_next=t0[0]
+    eta=[t0_next]
+    t1_next=nextShift(t0_next,t1)
+    t0_next=nextShift(t1_next,t0)
+    while t0_next !=-1 and t1_next !=-1:
+        eta.append(t1_next)
+        eta.append(t0_next)
+        t1_next=nextShift(t0_next,t1)
+        t0_next=nextShift(t1_next,t0)
+    return np.diff(eta)
+
+def nextShift(t,tt):
+    # t is a time, tt is a list of time from which we find min(tt>t)
+    mask=tt>t
+    if sum(mask)>0:    
+        return tt[tt>t][0]
+    else: 
+        # no next shift
+        return -1
 
 def plot_core_V_sliding(fN):
     # 2. sliding-window average of velocity the core
