@@ -4,6 +4,10 @@ Created on Fri Dec 18 08:50:44 2015
 
 @author: chemaoxfz
 """
+import matplotlib
+# Force matplotlib to not use any Xwindows backend.
+matplotlib.use('Agg')
+import sys
 from thermoSim import *
 import matplotlib.pyplot as plt
 import cPickle as pickle
@@ -11,10 +15,9 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool
 
-def script_core(runName='exp_core'):
+def script_core(runName='exp_core',dur=1e6):
     ####### Set Parameter List #######
-    dur=1e6
-
+    
     n_b=10
     bb=np.linspace(0,1,n_b)
     b_list=np.ones((n_b,2))
@@ -606,11 +609,22 @@ def experimentFrameCore4(fN,N=1e6,force=[1]):
 #then try to figure out a way to compute diffusion coefficient from these. Supposedly distribution of position? Velocity? 
 # Yeah, velocity. velocity. Read gillespie article.
 if __name__ == "__main__":
-    plt.rcParams['image.cmap']='inferno'
+    plt.rcParams['image.cmap']='coolwarm'
 #    scriptExperimentFrameCoreQLR()
 #   scriptExperimentFrameCore1()
 #    scriptHeat2()
-    script_core(runName='test')
+    argv=sys.argv
+    if len(argv)==2:
+        runName=argv[1]
+        dur=1e6
+    elif len(argv)==3:
+        runName=argv[1]
+        dur=float(argv[2])
+    else:
+    # no argument
+        runName='test'
+        dur=1e4
+    script_core(runName=runName, dur=dur)
 #    script_core()
 #    exp_coreOne(N=1e2)
 #    plot_core_V_drift('exp_core_0.7_0.7_m_100.0_N_100000.0')
