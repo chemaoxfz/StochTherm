@@ -45,14 +45,12 @@ def script_core(runName='exp_core',dur=1e6):
     T_canon=[.1,1.]
     
     # Create args list
-#    fN_gen=lambda args:'exp_core_b_'+str(args[0][0])+'_'+str(args[0][1])+'_m_'+str(args[1][0])+'_'+str(args[1][1])+'_T_'+str(args[2][0])+'_'+str(args[2][1])+'_N_'+str(N)
     rep_gen=lambda canon,lst: [canon for i in xrange(len(lst))]
     l_t=lambda l:map(list,zip(*l))
     m_core_args=l_t([rep_gen(b_canon,m_core_list), m_core_list, rep_gen(T_canon,m_core_list)])
     b_args=l_t([b_list,rep_gen(m_core_canon,b_list),rep_gen(T_canon,b_list)])
     T_args=l_t([rep_gen(b_canon,T_list),rep_gen(m_core_canon,T_list),T_list])
     args_param=b_args+m_core_args+T_args
-#    [x.insert(0,fN) for fN,x in zip(args_fN,args_param)]
     args_list=args_param
     args_list=[x+[dur] for x in args_list]
 #    ###############################
@@ -72,12 +70,47 @@ def script_core(runName='exp_core',dur=1e6):
     summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
 
 
+def script_core_m(runName='exp_core_m',dur=1e2):
+    n_m=10
+    m_core=np.logspace(1,3,n_m)
+    m_core_list=np.ones((n_m,2))
+    m_core_list.T[1]=m_core
+    m_name=runName+'_mCore'
+    m_scale='log'
+    b_canon=[.5,.5]
+    T_canon=[.1,1.]
+    # Create args list
+    rep_gen=lambda canon,lst: [canon for i in xrange(len(lst))]
+    l_t=lambda l:map(list,zip(*l))
+    m_core_args=l_t([rep_gen(b_canon,m_core_list), m_core_list, rep_gen(T_canon,m_core_list)])
+    args_param=m_core_args
+    args_list=args_param
+    args_list=[x+[dur] for x in args_list]
+#    ###############################
+#    # run to get results
+    pool=Pool(len(args_list))
+    results=pool.map(exp_coreOne_star,args_list)
+#    results=[exp_coreOne_star(args_list[0])]
+    fN_results_distr=runName+'_results_distr'
+    fN_results_running=runName+'_results_running'
+    
+    time_stationary=[x[2] for x in results]
+    
+    runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,
+        'runNames':[m_name],'runVars':[[1,1]],'runVarScales':[m_scale],'runVarNames':['m_core'],
+        'num_args':map(len,[m_core_list]),'args_list':args_list,'time_stationary':time_stationary}
+        
+    pickle.dump(runDict_params,open(runName+'.p','wr'))
+    runDict_results_distr=[x[0] for x in results]
+#    pickle.dump({'distr':runDict_results_distr},open(fN_results_distr+'.p','wr'))
+    runDict_results_running=[x[1] for x in results]
+#    pickle.dump({'running':runDict_results_running},open(fN_results_running+'.p','wr'))
+    summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
+
 def summaryPlot_core(runDict,distr,running):
     if isinstance(runDict,str):
         runDict=pickle.load(open(runDict+'.p','rU'))
     argIdx=0
-#    distr=pickle.load(open(runDict['results_distr']+'.p','rU'))
-#    running=pd.DataFrame.from_csv(runDict['results_running']+'.csv')
     for run_name,num_args,var,var_name,var_scale in zip(runDict['runNames'],runDict['num_args'],runDict['runVars'],runDict['runVarNames'],runDict['runVarScales']):
         relVars=[x[var[0]][var[1]] for x in runDict['args_list'][argIdx:argIdx+num_args]]
         relDistr=distr[argIdx:argIdx+num_args]
@@ -85,7 +118,7 @@ def summaryPlot_core(runDict,distr,running):
         summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,4])
         summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,5])
         summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='eta',rg=[0,10])
-#        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
+        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left')
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ep_rate')
         summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift',xscale=var_scale)
@@ -148,7 +181,7 @@ def summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0
 
 
 def exp_coreOne_star(ar):
-    kw={'mode':'time','N':ar[3],'b':ar[0],'m_core':ar[1],'T':ar[2]}
+    kw={'mode':'time_stationary','N':ar[3],'b':ar[0],'m_core':ar[1],'T':ar[2]}
     # mode='time' or 'step'
     return exp_coreOne(**kw)
  
@@ -156,25 +189,51 @@ def exp_coreOne(mode='time',N=1e2,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
     params={'m':[m_core[0],m_core[1],0.],'T':T,'L':1.,'D':1e-7,'d':0.,'a':[0.5,0.5],'b':b,
             'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}
     pt=geometricPt(params=params)
+    time_stationary=1.
     if mode=='step':
         [pt.step() for n in xrange(int(N))]
     elif mode=='time':
-        while pt.t[-1]<N: pt.step()
+        while pt.t[-1]<N: 
+            pt.step()
+    elif mode=='time_stationary':
+        del_time=100.
+        del_v_ratio=1e-2
+        time_prev=0.
+        time_now=0.
+        v_prev=0.
+        v_now=0.
+        while True:
+            while time_now-time_prev<del_time:
+                pt.step()
+                time_now=pt.t[-1]
+            v_now=slidingV(pt,del_time)
+            if abs(v_now-v_prev)/v_prev<del_v_ratio:
+                break
+            v_prev=v_now
+            time_prev=time_now
+        #now it's stationary regime
+        time_stationary=time_now
+        while pt.t[-1]-time_stationary<N:
+            pt.step()
     else: raise ValueError('invalid mode for exp_core_One. Either time or step')
-    result_distr,result_running=summaryCalc_core(pt)
-    return result_distr,result_running
+    result_distr,result_running=summaryCalc_core(pt,time_stationary)
+    return result_distr,result_running,time_stationary
 
-def summaryCalc_core(pt):
-    init_cutoff_time=1
+def slidingV(pt,del_time):
+    pt.xtnp.where((pt.t[-1]-pt.t)<del_time)[0]
+
+def summaryCalc_core(pt,time_stationary):
+    init_cutoff_time=time_stationary
     # Calculate the following: tau, dist, v_drift, ht_rate, ep_rate
-    mask=np.where(pt.t>init_cutoff_time)[0]
-    init_cutoff=np.max(mask)
+    init_cutoff=np.where(pt.t>init_cutoff_time)[0][0]
+#    init_cutoff_running=10
+    init_cutoff_running=init_cutoff
     l=len(pt.t)-init_cutoff
+    l_running=len(pt.t)-init_cutoff_running
     result_distr=dict.fromkeys(['tau','dist','eta'])
-    result_running=pd.DataFrame(np.nan,columns=['v_drift','ht_rate_left','ht_rate_right','ep_rate','t'],index=np.arange(l-1))
+    result_running=pd.DataFrame(np.nan,columns=['v_drift','ht_rate_left','ht_rate_right','ep_rate','t'],index=np.arange(l_running-1))
     result_distr['tau'],result_distr['dist'],result_distr['eta']=summaryCalc_distr(pt,init_cutoff)
-    result_running['v_drift'],result_running['ht_rate_left'],result_running['ht_rate_right'],result_running['ep_rate']=summaryCalc_running(pt,init_cutoff)
-    result_running['t']=np.array(pt.t[init_cutoff+1:])
+    result_running['t'],result_running['v_drift'],result_running['ht_rate_left'],result_running['ht_rate_right'],result_running['ep_rate']=summaryCalc_running(pt,init_cutoff_running)
     
     # Calculate coarse-graining distribtion results
     # given del_t, a coarse-graining time scale, what is the distribution of v_drift, ht_rate, and ep_rate?
@@ -186,9 +245,9 @@ def summaryCalc_core(pt):
 def summaryCalc_running(pt,init_cutoff):
     
     t=np.array(pt.t[init_cutoff+1:])-pt.t[init_cutoff]
-    vt=np.array(pt.vt[init_cutoff:]).T
-    vt_core=vt[1][1:]/pt.mu[1]
-    vt_molecule=vt[0]/pt.mu[0]
+    vt_molecule=np.array(pt.vt[init_cutoff:]).T[0]/pt.mu[0]
+    xt_core=np.array(pt.xt_noncyclic).T[1]
+    xt_core=(xt_core[init_cutoff:]-xt_core[init_cutoff-1])/pt.mu[1]
     wt=np.array(pt.wt[init_cutoff+1:])
     st=np.array(pt.st[init_cutoff+1:])
 
@@ -208,11 +267,25 @@ def summaryCalc_running(pt,init_cutoff):
     lqr=leftQ_cum/t
     rqr=rightQ_cum/t
     sr=S_cum/t
-    v_drift=np.cumsum(vt_core)/t
-    return v_drift,lqr,rqr,sr
+    v_drift=xt_core/t
+    return t,v_drift,lqr,rqr,sr
 
-def summaryCalc_sliding(pt,del_t):
+def summaryCalc_sliding(pt,init_cutoff):
     pass
+
+def summaryCalc_end(pt,init_cutoff):
+    # del_t is the window of values used for median and quantile calculations
+    t=np.array(pt.t[init_cutoff+1:])-pt.t[init_cutoff]
+    vt=np.array(pt.vt[init_cutoff:]).T
+    vt_core=vt[1][1:]/pt.mu[1]
+    vt_molecule=vt[0]/pt.mu[0]
+    wt=np.array(pt.wt[init_cutoff+1:])
+    st=np.array(pt.st[init_cutoff+1:])
+    
+    
+    
+    #for each dict, we have keys 'min','max','median','quantile_.25','quantile_.75'
+    return v_drift_dict,lqr_dict,rqr_dict,sr_dict
 
 def summaryCalc_distr(pt,init_cutoff):
     # tau is time between two consecutive collisions between molecule and frame
@@ -634,21 +707,23 @@ def experimentFrameCore4(fN,N=1e6,force=[1]):
 # Yeah, velocity. velocity. Read gillespie article.
 if __name__ == "__main__":
     plt.rcParams['image.cmap']='coolwarm'
-#    scriptExperimentFrameCoreQLR()
-#   scriptExperimentFrameCore1()
-#    scriptHeat2()
     argv=sys.argv
-    if len(argv)==2:
-        runName=argv[1]
+    if len(argv)==3:
+        runName=argv[2]
         dur=1e6
-    elif len(argv)==3:
-        runName=argv[1]
-        dur=float(argv[2])
+    elif len(argv)==4:
+        runName=argv[2]
+        dur=float(argv[3])
     else:
     # no argument
         runName='test'
         dur=1e4
-    script_core(runName=runName, dur=dur)
+    if argv[1]=='core':
+        script_core(runName=runName, dur=dur)
+    elif argv[1]=='core_m':
+        script_core_m(runName=runName,dur=dur)
+    else:
+        raise ValueError('not valid first argument')
 #    script_core()
 #    exp_coreOne(N=1e2)
 #    plot_core_V_drift('exp_core_0.7_0.7_m_100.0_N_100000.0')

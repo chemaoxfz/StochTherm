@@ -343,7 +343,8 @@ class geometricPt:
         return qlr, qrr, sr,ql,qr,s
         
     def driftV(self):
-        v_d=np.cumsum(np.array(self.xt).T[1])/self.t
+        v_d=self.xt_noncyclic[-1][1]/self.mu[1]/self.t[-1]
+        # gives just the last number
         return v_d
 
 def defaultParams():
