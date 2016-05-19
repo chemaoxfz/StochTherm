@@ -7,13 +7,13 @@ Created on Fri Dec 18 08:50:44 2015
 import matplotlib
 # Force matplotlib to not use any Xwindows backend.
 matplotlib.use('Agg')
-import sys
-from thermoSim import *
+from thermoSim import geometricPt
 import matplotlib.pyplot as plt
 import cPickle as pickle
 import pandas as pd
 import numpy as np
 from multiprocessing import Pool
+import argparse
 
 def script_core(runName='exp_core',dur=1e6):
     ####### Set Parameter List #######
@@ -27,7 +27,7 @@ def script_core(runName='exp_core',dur=1e6):
     b_scale='linear'
     
     n_m=10
-    m_core=np.logspace(-3,3,n_m)
+    m_core=np.logspace(1,3,n_m)
     m_core_list=np.ones((n_m,2))
     m_core_list.T[1]=m_core
     m_name=runName+'_mCore'
@@ -70,7 +70,7 @@ def script_core(runName='exp_core',dur=1e6):
     summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
 
 
-def script_core_m(runName='exp_core_m',dur=1e2):
+def script_core_m(runName='exp_core_m',dur=1e2,mode='time'):
     n_m=10
     m_core=np.logspace(1,3,n_m)
     m_core_list=np.ones((n_m,2))
@@ -85,7 +85,7 @@ def script_core_m(runName='exp_core_m',dur=1e2):
     m_core_args=l_t([rep_gen(b_canon,m_core_list), m_core_list, rep_gen(T_canon,m_core_list)])
     args_param=m_core_args
     args_list=args_param
-    args_list=[x+[dur] for x in args_list]
+    args_list=[x+[dur,mode] for x in args_list]
 #    ###############################
 #    # run to get results
     pool=Pool(len(args_list))
@@ -135,10 +135,16 @@ def summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_dri
     ax=fig.add_subplot(111)
     x=[]
     y=[]
+    y_25=[]
+    y_75=[]
     for rlt,var in zip(relRunning,relVars):
         y.append(rlt[ylabel][rlt[ylabel].index[-1]])
+#        y.append(np.percentile(rlt[ylabel],50))
+        y_25.append(np.percentile(rlt[ylabel],25))
+        y_75.append(np.percentile(rlt[ylabel],75))
         x.append(var)
-    ax.plot(x,y,'-o',lw=2,label=ylabel)
+    ax.plot(x,y,'-o',color='blue',lw=2,label=ylabel)
+    ax.fill_between(x,y_25,y_75,color='purple',alpha=0.3,label='25-75 quantile')
     ax.set_ylabel(ylabel)
     ax.set_xlabel(var_name)
     ax.set_xscale(xscale)
@@ -181,8 +187,8 @@ def summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0
 
 
 def exp_coreOne_star(ar):
-    kw={'mode':'time_stationary','N':ar[3],'b':ar[0],'m_core':ar[1],'T':ar[2]}
-    # mode='time' or 'step'
+    kw={'mode':ar[4],'N':ar[3],'b':ar[0],'m_core':ar[1],'T':ar[2]}
+    # mode='time' or 'step' or 'time_stationary'
     return exp_coreOne(**kw)
  
 def exp_coreOne(mode='time',N=1e2,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
@@ -220,7 +226,8 @@ def exp_coreOne(mode='time',N=1e2,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
     return result_distr,result_running,time_stationary
 
 def slidingV(pt,del_time):
-    pt.xtnp.where((pt.t[-1]-pt.t)<del_time)[0]
+    pt.xt[np.where((pt.t[-1]-pt.t)<del_time)[0]]
+    pass
 
 def summaryCalc_core(pt,time_stationary):
     init_cutoff_time=time_stationary
@@ -247,7 +254,7 @@ def summaryCalc_running(pt,init_cutoff):
     t=np.array(pt.t[init_cutoff+1:])-pt.t[init_cutoff]
     vt_molecule=np.array(pt.vt[init_cutoff:]).T[0]/pt.mu[0]
     xt_core=np.array(pt.xt_noncyclic).T[1]
-    xt_core=(xt_core[init_cutoff:]-xt_core[init_cutoff-1])/pt.mu[1]
+    xt_core=(xt_core[init_cutoff+1:]-xt_core[init_cutoff])/pt.mu[1]
     wt=np.array(pt.wt[init_cutoff+1:])
     st=np.array(pt.st[init_cutoff+1:])
 
@@ -705,25 +712,35 @@ def experimentFrameCore4(fN,N=1e6,force=[1]):
 
 #then try to figure out a way to compute diffusion coefficient from these. Supposedly distribution of position? Velocity? 
 # Yeah, velocity. velocity. Read gillespie article.
+
 if __name__ == "__main__":
-    plt.rcParams['image.cmap']='coolwarm'
-    argv=sys.argv
-    if len(argv)==3:
-        runName=argv[2]
-        dur=1e6
-    elif len(argv)==4:
-        runName=argv[2]
-        dur=float(argv[3])
+#    plt.rcParams['image.cmap']='coolwarm'
+    import pdb
+    pdb.set_trace()
+    plt.set_cmap('coolwarm')
+    
+    parser=argparse.ArgumentParser(description='Stochastic simulation regarding thermophoresis.')
+    parser.add_argument('-o','--output',type=str,nargs='?',default='test_name',
+                        help='Supply a file name for results to be saved to.')
+    parser.add_argument('-d','--duration',type=float,nargs='?', default=1e6,
+                        help='Supply a number as the duration for the experiment to run.')
+    parser.add_argument('-e','--experiment',type=str,nargs='?', default='core_m',
+                        help='Which experiment you would like to run. There is:\n [core] and [core_m]')
+    parser.add_argument('-m','--mode',type=str,nargs='?',default='time',
+                        help='Mode the experiment shall run in. [nstep, time, time_stationary]')
+    args=parser.parse_args()    
+    
+    
+    if args.experiment=='core':
+        script_core(runName=args.output, dur=args.duration,mode=args.mode)
+    elif args.experiment=='core_m':
+        script_core_m(runName=args.output,dur=args.duration,mode=args.mode)
     else:
-    # no argument
-        runName='test'
-        dur=1e4
-    if argv[1]=='core':
-        script_core(runName=runName, dur=dur)
-    elif argv[1]=='core_m':
-        script_core_m(runName=runName,dur=dur)
-    else:
-        raise ValueError('not valid first argument')
+        raise ValueError('not valid --experiment argument')
+
+
+
+
 #    script_core()
 #    exp_coreOne(N=1e2)
 #    plot_core_V_drift('exp_core_0.7_0.7_m_100.0_N_100000.0')

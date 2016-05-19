@@ -27,22 +27,18 @@ class geometricPt:
         m=params['m']
         L=params['L']
         #x1 is molecule, x2 is frame (upward), x3 is weight (towards us).
-#        self.x0=np.array([np.random.rand(),np.random.rand(),np.random.rand()*(D-d)-(D-d)/2])
-#        self.v0=np.pad(self.MB1D(params['T1'],params['m'][0]),(0,2),'constant',constant_values=0)
-        self.x0=np.array([0.,0.,0.])
-#        self.v0=np.array([self.MB1D(params['T'][0],params['m'][0])[0],self.MB1D(params['T'][0],params['m'][1])[0],self.MB1D(params['T'][0],params['m'][2])[0]])
-#        self.v0=np.array([self.MB1D(params['T'][0],params['m'][0])[0],0.,0.])
-        self.v0=np.array([1.,0.,0.])
-        self.t0=0.
-        self.w0=0
-        self.s0=1
-        self.cyclicCounter0=-1
-        self.w_o0=self.w0
-        #counting how many times has the cyclic boundary been crossed
-        #entries are for wall 2,3,4,5, i.e. Ur, Lr, F, B 
-
+        # random initialization 
+        x1=np.random.rand()*L
+        self.x0=np.array([np.random.rand()*L,x1,x1+((np.random.rand()*2-1)*(D-d)/2)])
+        lr=int(np.random.rand()*2)
+        self.v0=np.array([-(lr*2-1)*self.MB1D(params['T'][lr],params['m'][0])[0],np.random.normal(loc=0.05,scale=0.1),np.random.normal(loc=0.05,scale=0.1)])
         
-        mu=np.sqrt(m/np.sum(m))
+        self.t0=0.
+        self.w0=lr # if v0[0] is positive, it's left wall, w0=0, if negative, right wall, w0=1.
+        self.s0=0
+        self.w_o0=self.w0
+        
+        mu=np.sqrt(m/np.sum(m)) # scale conversion to geometric point for specular reflection
         self.mu=mu
         if self.params['accelFlag']=='none':
             self.aFunc=[]
@@ -52,10 +48,13 @@ class geometricPt:
         #Order of walls:L,R, Ur,Lr, F,B, FUr,FLr, FUrE,FLrE.
         self.xW=np.array([[0,0,0],[1,0,0],[0,1,0],[0,0,0],[0,0,1],[0,0,0],[0,(D-d)/2,0],[0,0,(D-d)/2],[0,D/2,0],[D/2,0,0],[0,(D-d)/2,L],[0,L,(D-d)/2],[L,D/2,0],[D/2,L,0]])
         self.xW=mu*self.xW
+
         #normal vectors
         fUr=np.array([0,-mu[2]/np.sqrt(mu[2]**2+mu[1]**2),mu[1]/np.sqrt(mu[2]**2+mu[1]**2)])
         fUrE=np.array([-mu[1]/np.sqrt(mu[0]**2+mu[1]**2),mu[0]/np.sqrt(mu[0]**2+mu[1]**2),0])
         self.n=np.array([[1,0,0],[-1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1],fUr,-1*fUr,fUrE,-1*fUrE,fUr,-1*fUr,fUrE,-1*fUrE])
+
+        # setting initial values with scale conversion.        
         self.t=[self.t0]
         self.xt=[mu*self.x0]
         self.xt_noncyclic=[mu*self.x0]
@@ -64,7 +63,6 @@ class geometricPt:
         self.w_ommit=[self.w_o0]
         self.st=[self.s0]
         self.x_move=[]
-        self.cyclicCounter=[self.cyclicCounter0]
     
     
     def accelFunc(self,flag='constant',arg=np.zeros(3)):
@@ -90,7 +88,7 @@ class geometricPt:
         self.st.append(s)
         self.x_move.append(x_move)
         self.xt_noncyclic.append(self.xt_noncyclic[-1]+x_move-x)
-        self.cyclicCounter.append(cc)
+#        self.cyclicCounter.append(cc)
     
     def dtCalc(self,x,v,w_o):
         temp=np.zeros(len(self.n))
@@ -178,17 +176,17 @@ class geometricPt:
         x=np.sqrt(-2*self.kb*T/m*np.log(unif))
         return x
     
-    def cyclicToNoncyclic(self,x_cyclic,axis):
-        idx=axis-1
-        cc=np.array(self.cyclicCounter)
-        ccAddIdx=np.where(cc==idx*2)
-        ccDedIdx=np.where(cc==idx*2+1)
-        temp=np.zeros(len(x_cyclic))
-        temp[ccAddIdx]=1.
-        temp[ccDedIdx]=-1.
-        temp=np.cumsum(temp)
-        x=x_cyclic+temp*self.params['L']*self.mu[axis]
-        return x
+#    def cyclicToNoncyclic(self,x_cyclic,axis):
+#        idx=axis-1
+#        cc=np.array(self.cyclicCounter)
+#        ccAddIdx=np.where(cc==idx*2)
+#        ccDedIdx=np.where(cc==idx*2+1)
+#        temp=np.zeros(len(x_cyclic))
+#        temp[ccAddIdx]=1.
+#        temp[ccDedIdx]=-1.
+#        temp=np.cumsum(temp)
+#        x=x_cyclic+temp*self.params['L']*self.mu[axis]
+#        return x
 
     def plotFrame(self,axis=[0,1],cyclic=False,ommit=100):
         fig=plt.figure()
@@ -203,7 +201,7 @@ class geometricPt:
             xlabel='t'
             ylabel='x'+str(axis[0])
             if axis[0]!=0:
-                y=self.cyclicToNoncyclic(yy,axis[0])
+                y=self.xt_noncyclic.T[axis[0]]
                 y=y[np.arange(int(len(yy)/ommit))*ommit]
             plotAxis=axis
                 
@@ -373,7 +371,7 @@ def simulation(T=1e5,N=3e1,fName='thermoSim.p',params=defaultParams(),isDump=Tru
         't0':pt.t0,
         'w0':pt.w0,
         's0':pt.s0,
-        'cyclicCounter':pt.cyclicCounter,
+#        'cyclicCounter':pt.cyclicCounter,
         'mu':pt.mu,
         'xW':pt.xW,
         'n':pt.n,
@@ -393,7 +391,7 @@ def reconstructPt(fN):
     ptd=pickle.load(open(fN,'r'))
     pt=geometricPt(ptd['params'])
     pt.kb=ptd['kb']
-    pt.cyclicCounter=ptd['cyclicCounter']
+#    pt.cyclicCounter=ptd['cyclicCounter']
     pt.mu=ptd['mu']
     pt.xW=ptd['xW']
     pt.n=ptd['n']
