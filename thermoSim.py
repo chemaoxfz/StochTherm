@@ -31,7 +31,7 @@ class geometricPt:
         x1=np.random.rand()*L
         self.x0=np.array([np.random.rand()*L,x1,x1+((np.random.rand()*2-1)*(D-d)/2)])
         lr=int(np.random.rand()*2)
-        self.v0=np.array([-(lr*2-1)*self.MB1D(params['T'][lr],params['m'][0])[0],np.random.normal(loc=0.05,scale=0.1),np.random.normal(loc=0.05,scale=0.1)])
+        self.v0=np.array([-(lr*2-1)*self.MB1D(params['T'][lr],params['m'][0])[0],np.random.normal(loc=0.05,scale=1.),np.random.normal(loc=0.05,scale=1.)])
         
         self.t0=0.
         self.w0=lr # if v0[0] is positive, it's left wall, w0=0, if negative, right wall, w0=1.

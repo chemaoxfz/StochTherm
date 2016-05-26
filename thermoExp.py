@@ -55,9 +55,9 @@ def script_core(runName='exp_core',dur=1e6):
     args_list=[x+[dur] for x in args_list]
 #    ###############################
 #    # run to get results
-    pool=Pool(len(args_list))
-    results=pool.map(exp_coreOne_star,args_list)
-#    results=[exp_coreOne_star(args_list[0])]
+#    pool=Pool(len(args_list))
+#    results=pool.map(exp_coreOne_star,args_list)
+    results=[exp_coreOne_star(args_list[0])]
     fN_results_distr=runName+'_results_distr'
     fN_results_running=runName+'_results_running'
     runDict_params={'results_distr':fN_results_distr,'results_running':fN_results_running,'runNames':[b_name,m_name,T_name],'runVars':[[0,0],[1,1],[2,0]],'runVarScales':[b_scale,m_scale,T_scale],'runVarNames':['b','m_core','T_left'],'num_args':map(len,[b_list,m_core_list,T_list]),'args_list':args_list}
@@ -70,7 +70,7 @@ def script_core(runName='exp_core',dur=1e6):
     summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
 
 
-def script_core_m(runName='exp_core_m',dur=1e2,mode='time'):
+def script_core_m(runName='exp_core_m',dur=1e2,mode='step'):
     n_m=10
     m_core=np.logspace(1,3,n_m)
     m_core_list=np.ones((n_m,2))
@@ -105,9 +105,10 @@ def script_core_m(runName='exp_core_m',dur=1e2,mode='time'):
 #    pickle.dump({'distr':runDict_results_distr},open(fN_results_distr+'.p','wr'))
     runDict_results_running=[x[1] for x in results]
 #    pickle.dump({'running':runDict_results_running},open(fN_results_running+'.p','wr'))
-    summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running)
+    runDict_results_end=[x[2] for x in results]
+    summaryPlot_core(runDict_params,runDict_results_distr,runDict_results_running,runDict_results_end)
 
-def summaryPlot_core(runDict,distr,running):
+def summaryPlot_core(runDict,distr,running,end):
     if isinstance(runDict,str):
         runDict=pickle.load(open(runDict+'.p','rU'))
     argIdx=0
@@ -115,36 +116,45 @@ def summaryPlot_core(runDict,distr,running):
         relVars=[x[var[0]][var[1]] for x in runDict['args_list'][argIdx:argIdx+num_args]]
         relDistr=distr[argIdx:argIdx+num_args]
         relRunning=running[argIdx:argIdx+num_args]
-        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,4])
-        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,5])
-        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='eta',rg=[0,10])
-        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
+        relEnd=end[argIdx:argIdx+num_args]
+#        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0,4])
+#        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='dist',rg=[0,5])
+#        summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='eta',rg=[0,10])
+#        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='v_drift')
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left')
 #        summaryPlot_core_running(relVars,relRunning,run_name,var_name,ylabel='ep_rate')
-        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift',xscale=var_scale)
-        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='ht_rate_left',xscale=var_scale)
-        summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='ep_rate',xscale=var_scale)
+        summaryPlot_core_end(relVars,relEnd,run_name,var_name,ylabel='v_drift',xscale=var_scale)
+#        summaryPlot_core_end(relVars,relEnd,run_name,var_name,ylabel='ht_rate_left',xscale=var_scale)
+#        summaryPlot_core_end(relVars,relEnd,run_name,var_name,ylabel='ep_rate',xscale=var_scale)
 #        summaryPlot_core_sliding()
 #        summaryPlot_core_slidingDistr()
         argIdx+=num_args
 #        pdb.set_trace()
 
-def summaryPlot_core_endValue(relVars,relRunning,run_name,var_name,ylabel='v_drift',xscale='log'):
-    suffix=run_name+'_'+ylabel+'_'+var_name+'_endValue'
+def summaryPlot_core_end(relVars,relEnd,run_name,var_name,ylabel='v_drift',xscale='log'):
+    suffix=run_name+'_'+ylabel+'_'+var_name+'_end'
     fig=plt.figure()
     ax=fig.add_subplot(111)
-    x=[]
-    y=[]
-    y_25=[]
-    y_75=[]
-    for rlt,var in zip(relRunning,relVars):
-        y.append(rlt[ylabel][rlt[ylabel].index[-1]])
-#        y.append(np.percentile(rlt[ylabel],50))
-        y_25.append(np.percentile(rlt[ylabel],25))
-        y_75.append(np.percentile(rlt[ylabel],75))
-        x.append(var)
-    ax.plot(x,y,'-o',color='blue',lw=2,label=ylabel)
-    ax.fill_between(x,y_25,y_75,color='purple',alpha=0.3,label='25-75 quantile')
+    ll=len(relEnd)
+    x=np.zeros(ll)
+    y=np.zeros(ll)
+    y_std=np.zeros(ll)
+    idx=0
+    if ylabel!='ep_rate':
+        for rlt,var in zip(relEnd,relVars):
+            y[idx]=rlt[ylabel]['mean']
+            y_std[idx]=rlt[ylabel]['std']
+            x[idx]=var
+            idx+=1
+        ax.plot(x,y,'-o',color='blue',lw=2,label=ylabel)
+        ax.fill_between(x,y-y_std,y+y_std,color='purple',alpha=0.3,label='std')
+    else:
+        for rlt,var in zip(relEnd,relVars):
+            y[idx]=rlt[ylabel]['mean']
+            x[idx]=var
+            idx+=1
+        ax.plot(x,y,'-o',color='blue',lw=2,label=ylabel)
+    
     ax.set_ylabel(ylabel)
     ax.set_xlabel(var_name)
     ax.set_xscale(xscale)
@@ -184,6 +194,34 @@ def summaryPlot_core_distr(relVars,relDistr,run_name,var_name,xlabel='tau',rg=[0
     handles, labels = ax.get_legend_handles_labels()
     lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=3,mode='expand',borderaxespad=0.)
     plt.savefig(suffix+'.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
+    
+    
+    fig=plt.figure()
+    ax=fig.add_subplot(111)
+    ll=len(relDistr)
+    mean=np.zeros(ll)
+    p_25=np.zeros(ll) 
+    p_75=np.zeros(ll) 
+    mn=np.zeros(ll) 
+    mx=np.zeros(ll) 
+    idx=0
+    for rlt in relDistr:
+        mean[idx]=np.average(rlt[xlabel])
+        p_25[idx]=np.percentile(rlt[xlabel],25)
+        p_75[idx]=np.percentile(rlt[xlabel],75)
+        mn[idx]=np.min(rlt[xlabel])
+        mx[idx]=np.max(rlt[xlabel])
+        idx+=1
+    ax.plot(relVars,mean,'-o',color='blue',lw=2,label='mean')
+    ax.fill_between(relVars,p_25,p_75,color='purple',alpha=0.3,label='25-75 quantile')
+#    ax.scatter(relVars,mn,color='black',label='min')
+#    ax.scatter(relVars,mx,color='black',label='max')
+    ax.set_ylabel(xlabel)
+    ax.set_xlabel(var_name)
+    ax.set_title(suffix)
+    handles, labels = ax.get_legend_handles_labels()
+    lgd = ax.legend(handles, labels, loc=3, bbox_to_anchor=(0.,1.02,1.,.102),ncol=3,mode='expand',borderaxespad=0.)
+    plt.savefig(suffix+'_summary.pdf', bbox_extra_artists=(lgd,), bbox_inches='tight')
 
 
 def exp_coreOne_star(ar):
@@ -195,59 +233,35 @@ def exp_coreOne(mode='time',N=1e2,b=[1.,1.],m_core=[1.,100.],T=[.1,1.]):
     params={'m':[m_core[0],m_core[1],0.],'T':T,'L':1.,'D':1e-7,'d':0.,'a':[0.5,0.5],'b':b,
             'kb':1.,'force':[0.,0.,0.],'accelFlag':'none'}
     pt=geometricPt(params=params)
-    time_stationary=1.
+    init_cutoff=int(N)/2
     if mode=='step':
         [pt.step() for n in xrange(int(N))]
     elif mode=='time':
         while pt.t[-1]<N: 
             pt.step()
-    elif mode=='time_stationary':
-        del_time=100.
-        del_v_ratio=1e-2
-        time_prev=0.
-        time_now=0.
-        v_prev=0.
-        v_now=0.
-        while True:
-            while time_now-time_prev<del_time:
-                pt.step()
-                time_now=pt.t[-1]
-            v_now=slidingV(pt,del_time)
-            if abs(v_now-v_prev)/v_prev<del_v_ratio:
-                break
-            v_prev=v_now
-            time_prev=time_now
-        #now it's stationary regime
-        time_stationary=time_now
-        while pt.t[-1]-time_stationary<N:
-            pt.step()
     else: raise ValueError('invalid mode for exp_core_One. Either time or step')
-    result_distr,result_running=summaryCalc_core(pt,time_stationary)
-    return result_distr,result_running,time_stationary
-
+    result_distr,result_running,result_end=summaryCalc_core(pt,init_cutoff)
+    return result_distr,result_running,result_end
+    
 def slidingV(pt,del_time):
     pt.xt[np.where((pt.t[-1]-pt.t)<del_time)[0]]
     pass
 
-def summaryCalc_core(pt,time_stationary):
-    init_cutoff_time=time_stationary
+def summaryCalc_core(pt,init_cutoff):
     # Calculate the following: tau, dist, v_drift, ht_rate, ep_rate
-    init_cutoff=np.where(pt.t>init_cutoff_time)[0][0]
-#    init_cutoff_running=10
-    init_cutoff_running=init_cutoff
-    l=len(pt.t)-init_cutoff
-    l_running=len(pt.t)-init_cutoff_running
+    l_running=len(pt.t)-init_cutoff
     result_distr=dict.fromkeys(['tau','dist','eta'])
+    result_end=dict.fromkeys(['v_drift'])
     result_running=pd.DataFrame(np.nan,columns=['v_drift','ht_rate_left','ht_rate_right','ep_rate','t'],index=np.arange(l_running-1))
     result_distr['tau'],result_distr['dist'],result_distr['eta']=summaryCalc_distr(pt,init_cutoff)
-    result_running['t'],result_running['v_drift'],result_running['ht_rate_left'],result_running['ht_rate_right'],result_running['ep_rate']=summaryCalc_running(pt,init_cutoff_running)
-    
+    result_running['t'],result_running['v_drift'],result_running['ht_rate_left'],result_running['ht_rate_right'],result_running['ep_rate']=summaryCalc_running(pt,init_cutoff)
+    result_end['v_drift']=summaryCalc_end(pt,init_cutoff)
     # Calculate coarse-graining distribtion results
     # given del_t, a coarse-graining time scale, what is the distribution of v_drift, ht_rate, and ep_rate?
 #    coarsen_fold=[1,10,100]
 #    result2=dict.fromkeys(['del_t','v_drift','ht_rate','ep_rate'])
 
-    return result_distr,result_running
+    return result_distr,result_running,result_end
 
 def summaryCalc_running(pt,init_cutoff):
     
@@ -281,18 +295,52 @@ def summaryCalc_sliding(pt,init_cutoff):
     pass
 
 def summaryCalc_end(pt,init_cutoff):
-    # del_t is the window of values used for median and quantile calculations
-    t=np.array(pt.t[init_cutoff+1:])-pt.t[init_cutoff]
+    t=np.array(pt.t[init_cutoff:])-pt.t[init_cutoff]
+    t_diff=np.diff(t)
     vt=np.array(pt.vt[init_cutoff:]).T
     vt_core=vt[1][1:]/pt.mu[1]
     vt_molecule=vt[0]/pt.mu[0]
     wt=np.array(pt.wt[init_cutoff+1:])
     st=np.array(pt.st[init_cutoff+1:])
     
+    leftHT_idx=np.where(np.logical_and(wt==0,st==1))[0]
+    rightHT_idx=np.where(np.logical_and(wt==1,st==1))[0]
+    t_HTL=t[leftHT_idx]
+    t_HTR=t[rightHT_idx]
+    t_HTL_diff=np.diff(t_HTL)
+    t_HTR_diff=np.diff(t_HTR)
+    leftQ=np.zeros(len(t_HTL))
+    rightQ=np.zeros(len(t_HTR))
+    leftQ=vt_molecule[leftHT_idx+1]**2-vt_molecule[leftHT_idx]**2
+    rightQ=vt_molecule[rightHT_idx+1]**2-vt_molecule[rightHT_idx]**2
+    leftQR=leftQ[1:]/t_HTL_diff
+    rightQR=rightQ[1:]/t_HTR_diff
+    
+    mean_fn=lambda x,t,T:np.sum(x*t)/T
+    std_fn=lambda x,x_bar,t,T:np.sqrt(np.sum((x-x_bar)**2*t)/T)
+    
+    v_mean=mean_fn(vt_core,t_diff,t[-1])
+    v_std=std_fn(vt_core,v_mean,t_diff,t[-1])
+    v_dic={'mean':v_mean,'std':v_std}
+    
+    lqr_mean=mean_fn(leftQR,t_HTL_diff,t_HTL[-1])
+    lqr_std=std_fn(leftQR,lqr_mean,t_HTL_diff,t_HTL[-1])
+    lqr_dic={'mean':lqr_mean,'std':lqr_std}
+    rqr_mean=mean_fn(rightQR,t_HTR_diff,t_HTR[-1])
+    rqr_std=std_fn(rightQR,rqr_mean,t_HTR_diff,t_HTR[-1])
+    rqr_dic={'mean':rqr_mean,'std':rqr_std}
     
     
-    #for each dict, we have keys 'min','max','median','quantile_.25','quantile_.75'
-    return v_drift_dict,lqr_dict,rqr_dict,sr_dict
+    
+    leftQ=np.zeros(len(wt))
+    rightQ=np.zeros(len(wt))
+    leftQ[leftHT_idx]=vt_molecule[leftHT_idx+1]**2-vt_molecule[leftHT_idx]**2
+    #positive heat is heat given from wall to molecule, i.e. added into system
+    rightQ[rightHT_idx]=vt_molecule[rightHT_idx+1]**2-vt_molecule[rightHT_idx]**2
+    sr=-leftQ/pt.params['T'][0]-rightQ/pt.params['T'][1]
+    sr_dic={'mean':np.sum(sr)/max(t_HTL[-1],t_HTR[-1])}
+    
+    return v_dic,lqr_dic,rqr_dic,sr_dic
 
 def summaryCalc_distr(pt,init_cutoff):
     # tau is time between two consecutive collisions between molecule and frame
@@ -715,14 +763,12 @@ def experimentFrameCore4(fN,N=1e6,force=[1]):
 
 if __name__ == "__main__":
 #    plt.rcParams['image.cmap']='coolwarm'
-    import pdb
-    pdb.set_trace()
     plt.set_cmap('coolwarm')
     
     parser=argparse.ArgumentParser(description='Stochastic simulation regarding thermophoresis.')
     parser.add_argument('-o','--output',type=str,nargs='?',default='test_name',
                         help='Supply a file name for results to be saved to.')
-    parser.add_argument('-d','--duration',type=float,nargs='?', default=1e6,
+    parser.add_argument('-d','--duration',type=float,nargs='?', default=1e4,
                         help='Supply a number as the duration for the experiment to run.')
     parser.add_argument('-e','--experiment',type=str,nargs='?', default='core_m',
                         help='Which experiment you would like to run. There is:\n [core] and [core_m]')
